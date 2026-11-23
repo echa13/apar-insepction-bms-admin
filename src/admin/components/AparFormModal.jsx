@@ -325,16 +325,23 @@ export default function AparFormModal({ apar, onClose }) {
             </div>
 
             {/* Auto Calculated Hydrotest (+5 Tahun) */}
-            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 flex flex-col justify-center">
+            <div className="bg-emerald-50/80 p-3 rounded-xl border border-emerald-200 flex flex-col justify-center">
               <span className="text-[11px] font-bold text-emerald-800 uppercase flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                Jadwal Uji Tekan (Hydrotest +5 Tahun)
+                Jadwal Uji Tekan (Hydrotest)
               </span>
               <span className="text-sm font-mono font-black text-emerald-700 mt-0.5">
-                {formatHseDate(calculatedNextHydrotest) || 'Belum dihitung'}
+                {formatHseDate(isEditing ? (apar.nextHydrotestDate || calculatedNextHydrotest) : calculatedNextHydrotest) || 'Belum dihitung'}
               </span>
-              <span className="text-[10px] text-emerald-600">
-                Otomatis dihitung 5 tahun dari tanggal pembuatan tabung.
+              <span className="text-[10px] text-emerald-800 mt-1 leading-relaxed">
+                {isEditing ? (
+                  <>
+                    <strong className="text-amber-800 bg-amber-100/80 px-1 py-0.2 rounded mr-1">Terkunci:</strong>
+                    Perpanjangan resmi jadwal Hydrotest wajib melalui tombol khusus <strong>"Update Hydrotest"</strong> dengan melampirkan bukti berkas sertifikat pihak ke-3.
+                  </>
+                ) : (
+                  'Otomatis dihitung 5 tahun dari tanggal pembuatan tabung baru.'
+                )}
               </span>
             </div>
 

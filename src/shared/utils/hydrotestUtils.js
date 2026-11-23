@@ -9,12 +9,12 @@
  * @param {string|Date} dateStr - Tanggal pembuatan (manufactureDate) atau uji hydrotest terakhir
  * @returns {string|null} Tanggal ISO YYYY-MM-DD atau null jika tidak valid
  */
-export function calculateNextHydrotestDate(dateStr) {
+export function calculateNextHydrotestDate(dateStr, years = 5) {
   if (!dateStr) return null;
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return null;
 
-  const nextYear = d.getFullYear() + 5;
+  const nextYear = d.getFullYear() + (Number(years) || 5);
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
 

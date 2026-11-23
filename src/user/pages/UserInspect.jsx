@@ -171,6 +171,23 @@ export default function UserInspect() {
             <span className="text-[11px] text-slate-400 block">Penempatan</span>
             <span className="font-semibold text-slate-800">{targetApar.placement}</span>
           </div>
+          <div>
+            <span className="text-[11px] text-slate-400 block">Uji Hydrotest (+5 Thn)</span>
+            <span className="font-mono font-bold text-emerald-700">
+              {formatHseDate(targetApar.nextHydrotestDate) || 'Belum Terjadwal'}
+            </span>
+          </div>
+          <div>
+            <span className="text-[11px] text-slate-400 block">Sertifikat Pihak ke-3</span>
+            {targetApar.hydrotestDocUrl ? (
+              <span className="font-semibold text-blue-700 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                Terverifikasi Sah
+              </span>
+            ) : (
+              <span className="text-slate-400">-</span>
+            )}
+          </div>
         </div>
       </div>
 

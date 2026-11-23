@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApar } from '../../shared/context/AparContext';
 import { getHydrotestStatus, formatHseDate } from '../../shared/utils/hydrotestUtils';
 import MaintenanceVerifyModal from '../components/MaintenanceVerifyModal';
+import HydrotestUpdateModal from '../components/HydrotestUpdateModal';
 import {
   Flame,
   CheckCircle2,
@@ -13,7 +14,8 @@ import {
   ChevronRight,
   Eye,
   Building2,
-  Clock
+  Clock,
+  ShieldCheck
 } from 'lucide-react';
 import {
   BarChart,
@@ -30,6 +32,7 @@ export default function AdminDashboard() {
   const { apars, rigs, maintenances } = useApar();
   const navigate = useNavigate();
   const [selectedVerifyTicket, setSelectedVerifyTicket] = useState(null);
+  const [hydroUpdateApar, setHydroUpdateApar] = useState(null);
 
   // 1. KPI Calculations
   const totalApar = apars.length;
@@ -411,13 +414,23 @@ export default function AdminDashboard() {
                     </p>
                   </div>
 
-                  <div className="text-right">
-                    <span className={`inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${status.badgeClass}`}>
-                      {status.label}
-                    </span>
-                    <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                      Tempo: {formatHseDate(apar.nextHydrotestDate)}
-                    </p>
+                  <div className="flex items-center gap-2.5 shrink-0 ml-3">
+                    <div className="text-right">
+                      <span className={`inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${status.badgeClass}`}>
+                        {status.label}
+                      </span>
+                      <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                        Tempo: {formatHseDate(apar.nextHydrotestDate)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setHydroUpdateApar(apar)}
+                      title="Update Hydrotest Pihak ke-3 (Upload Sertifikat)"
+                      className="p-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200 transition shadow-2xs cursor-pointer"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               );
@@ -431,6 +444,14 @@ export default function AdminDashboard() {
         <MaintenanceVerifyModal
           ticket={selectedVerifyTicket}
           onClose={() => setSelectedVerifyTicket(null)}
+        />
+      )}
+
+      {/* Hydrotest Update Modal Launcher */}
+      {hydroUpdateApar && (
+        <HydrotestUpdateModal
+          apar={hydroUpdateApar}
+          onClose={() => setHydroUpdateApar(null)}
         />
       )}
     </div>

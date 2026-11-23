@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApar } from '../../shared/context/AparContext';
 import { formatHseDate } from '../../shared/utils/hydrotestUtils';
+import HydrotestCertViewerModal from './HydrotestCertViewerModal';
 import {
   X,
   ClipboardList,
@@ -12,12 +13,14 @@ import {
   Camera,
   ZoomIn,
   ShieldCheck,
-  MapPin
+  MapPin,
+  FileCheck
 } from 'lucide-react';
 
 export default function InspectionHistoryModal({ apar, onClose }) {
   const { inspections } = useApar();
   const [zoomImage, setZoomImage] = useState(null);
+  const [isCertViewerOpen, setIsCertViewerOpen] = useState(false);
 
   if (!apar) return null;
 
@@ -87,7 +90,15 @@ export default function InspectionHistoryModal({ apar, onClose }) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-slate-500 text-[11px]">Kondisi Saat Ini:</span>
+              <button
+                type="button"
+                onClick={() => setIsCertViewerOpen(true)}
+                title="Buka Dokumen Sertifikat & Riwayat Hydrotest"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition cursor-pointer"
+              >
+                <FileCheck className="w-3.5 h-3.5 text-blue-600" />
+                <span>Lihat Sertifikat Hydrotest</span>
+              </button>
               <span
                 className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
                   apar.status === 'layak'
@@ -275,6 +286,14 @@ export default function InspectionHistoryModal({ apar, onClose }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Hydrotest Certificate Viewer Modal */}
+      {isCertViewerOpen && (
+        <HydrotestCertViewerModal
+          apar={apar}
+          onClose={() => setIsCertViewerOpen(false)}
+        />
       )}
     </>
   );

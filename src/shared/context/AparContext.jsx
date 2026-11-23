@@ -12,12 +12,14 @@ import {
   mapInspectionFromDb,
   mapInspectionToDb,
   mapMaintenanceFromDb,
-  mapMaintenanceToDb
+  mapMaintenanceToDb,
+  mapHydrotestLogFromDb,
+  mapHydrotestLogToDb
 } from '../utils/supabaseMappers';
 import { rigsSeed } from '../data/rigsSeed';
 import { aparTypesSeed } from '../data/aparTypesSeed';
 import { aparsSeed, initialMaintenancesSeed } from '../data/aparsSeed';
-import { calculateNextHydrotestDate } from '../utils/hydrotestUtils';
+import { calculateNextHydrotestDate, formatHseDate } from '../utils/hydrotestUtils';
 import { showErrorAlert, notifySuccess, notifyInfo, notifyWarning } from '../utils/alertUtils';
 
 const AparContext = createContext();
@@ -33,6 +35,7 @@ export function AparProvider({ children }) {
   const [aparTypes, setAparTypes] = useState(aparTypesSeed);
   const [maintenances, setMaintenances] = useState(initialMaintenancesSeed);
   const [inspections, setInspections] = useState([]);
+  const [hydrotestLogs, setHydrotestLogs] = useState([]);
   const [hfoUsers, setHfoUsers] = useState([
     { id: 'hfo-bms02-1', rigId: 'BMS-02', name: 'ANDI KURNIAWAN S', position: 'HFO', role: 'user', password: '123456' },
     { id: 'hfo-bms03-1', rigId: 'BMS-03', name: 'INSANUL ARIF', position: 'HFO', role: 'user', password: '123456' },
@@ -93,21 +96,23 @@ export function AparProvider({ children }) {
         setSupabaseSyncStatus('connecting');
       }
 
-      // Query 6 tabel Supabase secara paralel menggunakan Promise.all
+      // Query 7 tabel Supabase secara paralel menggunakan Promise.all
       const [
         { data: dbRigs, error: rigsError },
         { data: dbTypes, error: typesError },
         { data: dbUsers, error: usersError },
         { data: dbApars, error: aparsError },
         { data: dbInspections, error: inspError },
-        { data: dbMaintenances, error: maintError }
+        { data: dbMaintenances, error: maintError },
+        { data: dbHydroLogs, error: hydroError }
       ] = await Promise.all([
         supabase.from('rigs').select('*').order('code'),
         supabase.from('apar_types').select('*'),
         supabase.from('hfo_users').select('*').order('name'),
         supabase.from('apars').select('*').order('created_at', { ascending: false }),
         supabase.from('inspections').select('*').order('inspection_date', { ascending: false }),
-        supabase.from('maintenances').select('*').order('created_at', { ascending: false })
+        supabase.from('maintenances').select('*').order('created_at', { ascending: false }),
+        supabase.from('hydrotest_logs').select('*').order('test_date', { ascending: false })
       ]);
 
       if (rigsError) throw rigsError;
@@ -116,6 +121,9 @@ export function AparProvider({ children }) {
       if (aparsError) throw aparsError;
       if (inspError) throw inspError;
       if (maintError) throw maintError;
+      if (hydroError) {
+        console.warn('Hydrotest logs fetch notice:', hydroError.message);
+      }
 
       // 1. Rigs mapping
       const mappedRigs = (dbRigs && dbRigs.length > 0) ? dbRigs.map(mapRigFromDb) : rigsSeed;
@@ -155,6 +163,11 @@ export function AparProvider({ children }) {
         ? dbMaintenances.map(m => mapMaintenanceFromDb(m, aparLookup, rigLookup))
         : initialMaintenancesSeed;
 
+      // 7. Hydrotest Logs mapping
+      const mappedHydroLogs = (dbHydroLogs && dbHydroLogs.length > 0)
+        ? dbHydroLogs.map(l => mapHydrotestLogFromDb(l, aparLookup, rigLookup))
+        : [];
+
       // Update state aplikasi
       setRigs(mappedRigs);
       setAparTypes(mappedTypes);
@@ -162,6 +175,7 @@ export function AparProvider({ children }) {
       setApars(mappedApars);
       setInspections(mappedInspections);
       setMaintenances(mappedMaint);
+      setHydrotestLogs(mappedHydroLogs);
 
       setIsSupabaseConnected(true);
       setSupabaseSyncStatus('online');
@@ -228,6 +242,12 @@ export function AparProvider({ children }) {
           notifyWarning(`Laporan kerusakan baru (${payload.new?.reported_by || 'HFO'}): ${payload.new?.issue_description || ''}`);
         } else if (payload.eventType === 'UPDATE' && payload.new?.status === 'pending_review') {
           notifyInfo(`Foto bukti perbaikan diunggah oleh ${payload.new?.evidence_uploaded_by || 'User'}. Menunggu verifikasi Before vs After.`);
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hydrotest_logs' }, (payload) => {
+        fetchAllData({ silent: true });
+        if (payload.eventType === 'INSERT') {
+          notifyInfo(`Sertifikat Hydrotest baru telah diperbarui & disinkronkan dari Supabase.`);
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rigs' }, () => {
@@ -796,6 +816,146 @@ export function AparProvider({ children }) {
     }
   };
 
+  // f. Admin Update Hydrotest Khusus Pihak ke-3 (dengan upload dokumen/sertifikat)
+  const updateAparHydrotest = async (aparId, {
+    testDate,
+    nextDueDate,
+    vendorName = 'PT Sepakat HSE Solution',
+    certificateNo = '',
+    documentData,
+    documentName = 'Sertifikat_Hydrotest.pdf',
+    notes = '',
+    closeRelatedTicket = true
+  }) => {
+    const targetApar = apars.find(a => a.id === aparId || a.assetCode === aparId);
+    if (!targetApar) {
+      showErrorAlert('APAR Tidak Ditemukan', 'Tabung APAR yang dimaksud tidak ditemukan.');
+      return false;
+    }
+
+    const logId = `hydro-${Date.now()}`;
+    const realAparId = targetApar.id;
+    const rigId = targetApar.rigId;
+    const updatedBy = currentUser?.name || 'Admin HSE Pusat';
+
+    const newLog = {
+      id: logId,
+      aparId: realAparId,
+      apar_id: realAparId,
+      assetCode: targetApar.assetCode,
+      asset_code: targetApar.assetCode,
+      rigId: rigId,
+      rig_id: rigId,
+      rigCode: targetApar.rigCode,
+      testDate: testDate,
+      test_date: testDate,
+      nextDueDate: nextDueDate,
+      next_due_date: nextDueDate,
+      vendorName: vendorName,
+      vendor_name: vendorName,
+      certificateNo: certificateNo || '-',
+      certificate_no: certificateNo || '-',
+      documentData: documentData,
+      document_data: documentData,
+      documentName: documentName,
+      document_name: documentName,
+      updatedBy: updatedBy,
+      updated_by: updatedBy,
+      notes: notes || '',
+      createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString()
+    };
+
+    // 1. Optimistic update hydrotestLogs
+    setHydrotestLogs(prev => [newLog, ...prev]);
+
+    // 2. Optimistic update apars: perbarui last_hydrotest_date, next_hydrotest_date, hydrotest_doc_url, doc_name, vendor
+    setApars(prev => prev.map(a => {
+      if (a.id !== realAparId) return a;
+      return {
+        ...a,
+        lastHydrotestDate: testDate,
+        last_hydrotest_date: testDate,
+        nextHydrotestDate: nextDueDate,
+        next_hydrotest_date: nextDueDate,
+        hydrotestDocUrl: documentData,
+        hydrotest_doc_url: documentData,
+        hydrotestDocName: documentName,
+        hydrotest_doc_name: documentName,
+        hydrotestVendor: vendorName,
+        hydrotest_vendor: vendorName,
+        status: a.status === 'afkir' ? 'afkir' : 'layak',
+        issues: a.issues ? a.issues.filter(i => !i.toLowerCase().includes('hydrotest')) : []
+      };
+    }));
+
+    // 3. Optimistic update ticket jika ada tiket hydrotest terbuka
+    let closedTicketId = null;
+    const openHydroTicket = maintenances.find(m =>
+      (m.aparId === realAparId || m.assetCode === targetApar.assetCode) &&
+      m.actionType === 'hydrotest' &&
+      (m.status === 'open' || m.status === 'in_progress' || m.status === 'pending_review')
+    );
+
+    if (openHydroTicket && closeRelatedTicket) {
+      closedTicketId = openHydroTicket.id;
+      setMaintenances(prev => prev.map(m => {
+        if (m.id !== closedTicketId) return m;
+        return {
+          ...m,
+          status: 'closed',
+          evidencePhoto: documentData,
+          evidence_photo: documentData,
+          evidenceUploadedBy: updatedBy,
+          repairNotes: `Sertifikat Hydrotest #${certificateNo || '-'} oleh ${vendorName}`,
+          adminNotes: `Hydrotest selesai diverifikasi oleh ${updatedBy}. Sertifikat: ${certificateNo || '-'}`,
+          resolvedAt: new Date().toISOString()
+        };
+      }));
+    }
+
+    // 4. Kirim ke Supabase
+    try {
+      // a. Insert log riwayat hydrotest
+      const dbLogPayload = mapHydrotestLogToDb(newLog);
+      const { error: logErr } = await supabase.from('hydrotest_logs').insert(dbLogPayload);
+      if (logErr) throw logErr;
+
+      // b. Update tabel apars
+      const aparUpdatePayload = {
+        last_hydrotest_date: testDate,
+        next_hydrotest_date: nextDueDate,
+        hydrotest_doc_url: documentData,
+        hydrotest_doc_name: documentName,
+        hydrotest_vendor: vendorName,
+        ...(targetApar.status !== 'afkir' ? { status: 'layak' } : {})
+      };
+      const { error: aparErr } = await supabase.from('apars').update(aparUpdatePayload).eq('id', realAparId);
+      if (aparErr) throw aparErr;
+
+      // c. Update ticket jika ada
+      if (closedTicketId) {
+        await supabase.from('maintenances').update({
+          status: 'closed',
+          evidence_photo: documentData,
+          evidence_uploaded_by: updatedBy,
+          repair_notes: `Sertifikat Hydrotest #${certificateNo || '-'} oleh ${vendorName}`,
+          admin_notes: `Hydrotest selesai diverifikasi oleh ${updatedBy}. Sertifikat: ${certificateNo || '-'}`,
+          resolved_at: new Date().toISOString()
+        }).eq('id', closedTicketId);
+      }
+
+      notifySuccess(`Sertifikat Hydrotest ${targetApar.assetCode} berhasil disimpan & berlaku s.d. ${formatHseDate(nextDueDate)}.`);
+      await fetchAllData({ silent: true });
+      return true;
+    } catch (e) {
+      console.error('Supabase updateAparHydrotest error:', e);
+      showErrorAlert('Gagal Memperbarui Hydrotest', e.message || 'Terjadi kesalahan di database Supabase.');
+      await fetchAllData({ silent: true });
+      throw e;
+    }
+  };
+
   const resetDemoData = () => {
     setApars(aparsSeed);
     setRigs(rigsSeed);
@@ -818,6 +978,7 @@ export function AparProvider({ children }) {
       aparTypes,
       maintenances,
       inspections,
+      hydrotestLogs,
       hfoUsers,
       currentUser,
       isSupabaseConnected,
@@ -836,6 +997,7 @@ export function AparProvider({ children }) {
       submitEvidence,
       verifyMaintenance,
       createManualMaintenance,
+      updateAparHydrotest,
       recordInspection,
       resetDemoData,
       loginAs

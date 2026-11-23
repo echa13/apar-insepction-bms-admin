@@ -4,6 +4,8 @@ import { getHydrotestStatus, formatHseDate } from '../../shared/utils/hydrotestU
 import AparFormModal from '../components/AparFormModal';
 import ExcelImportModal from '../components/ExcelImportModal';
 import InspectionHistoryModal from '../components/InspectionHistoryModal';
+import HydrotestUpdateModal from '../components/HydrotestUpdateModal';
+import HydrotestCertViewerModal from '../components/HydrotestCertViewerModal';
 import {
   Flame,
   Search,
@@ -18,7 +20,9 @@ import {
   CalendarPlus,
   Building2,
   FileSpreadsheet,
-  ClipboardList
+  ClipboardList,
+  ShieldCheck,
+  FileCheck
 } from 'lucide-react';
 import { confirmActionAlert } from '../../shared/utils/alertUtils';
 
@@ -30,6 +34,8 @@ export default function AdminAparManage() {
   const [editingApar, setEditingApar] = useState(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [historyModalApar, setHistoryModalApar] = useState(null);
+  const [hydroUpdateApar, setHydroUpdateApar] = useState(null);
+  const [certViewerApar, setCertViewerApar] = useState(null);
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
@@ -334,9 +340,22 @@ export default function AdminAparManage() {
                             {formatHseDate(apar.nextHydrotestDate)}
                           </span>
                         </div>
-                        <span className={`inline-block text-[10px] font-semibold px-2 py-0.2 rounded-full border mt-0.5 ${hydroStatus.badgeClass}`}>
-                          {hydroStatus.label}
-                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className={`inline-block text-[10px] font-semibold px-2 py-0.2 rounded-full border ${hydroStatus.badgeClass}`}>
+                            {hydroStatus.label}
+                          </span>
+                          {apar.hydrotestDocUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setCertViewerApar(apar)}
+                              title="Lihat Dokumen Sertifikat Hydrotest Pihak ke-3"
+                              className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition cursor-pointer"
+                            >
+                              <FileCheck className="w-2.5 h-2.5 text-blue-600" />
+                              <span>Sertifikat</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       {/* Condition Status */}
@@ -366,6 +385,24 @@ export default function AdminAparManage() {
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         <div className="inline-flex items-center gap-1">
                           <button
+                            type="button"
+                            onClick={() => setHydroUpdateApar(apar)}
+                            title="Update Hydrotest Pihak ke-3 (Upload Sertifikat)"
+                            className="p-1.5 rounded-lg text-blue-600 bg-blue-50/80 hover:bg-blue-100 hover:text-blue-700 border border-blue-200/70 transition cursor-pointer"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                          </button>
+                          {apar.hydrotestDocUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setCertViewerApar(apar)}
+                              title="Lihat Berkas Sertifikat & Riwayat Hydrotest"
+                              className="p-1.5 rounded-lg text-emerald-600 bg-emerald-50/80 hover:bg-emerald-100 hover:text-emerald-700 border border-emerald-200/70 transition cursor-pointer"
+                            >
+                              <FileCheck className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
                             onClick={() => setHistoryModalApar(apar)}
                             title="Lihat Log Riwayat Inspeksi HFO Lapangan"
                             className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-slate-100 transition cursor-pointer"
@@ -382,14 +419,14 @@ export default function AdminAparManage() {
                           <button
                             onClick={() => { setEditingApar(apar); setIsFormModalOpen(true); }}
                             title="Edit Tabung"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-slate-100 transition cursor-pointer"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleDelete(apar)}
                             title="Hapus dari Database"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-slate-100 transition"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-slate-100 transition cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -422,6 +459,23 @@ export default function AdminAparManage() {
         <InspectionHistoryModal
           apar={historyModalApar}
           onClose={() => setHistoryModalApar(null)}
+        />
+      )}
+
+      {/* Hydrotest Update Modal */}
+      {hydroUpdateApar && (
+        <HydrotestUpdateModal
+          apar={hydroUpdateApar}
+          onClose={() => setHydroUpdateApar(null)}
+        />
+      )}
+
+      {/* Hydrotest Certificate Viewer Modal */}
+      {certViewerApar && (
+        <HydrotestCertViewerModal
+          apar={certViewerApar}
+          onClose={() => setCertViewerApar(null)}
+          onOpenUpdateModal={(target) => setHydroUpdateApar(target)}
         />
       )}
     </div>

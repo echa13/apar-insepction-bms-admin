@@ -116,6 +116,12 @@ export function mapAparFromDb(row, rigLookup = {}, typeLookup = {}) {
     last_hydrotest_date: row.last_hydrotest_date || null,
     nextHydrotestDate: row.next_hydrotest_date || null,
     next_hydrotest_date: row.next_hydrotest_date || null,
+    hydrotestDocUrl: row.hydrotest_doc_url || null,
+    hydrotest_doc_url: row.hydrotest_doc_url || null,
+    hydrotestDocName: row.hydrotest_doc_name || null,
+    hydrotest_doc_name: row.hydrotest_doc_name || null,
+    hydrotestVendor: row.hydrotest_vendor || null,
+    hydrotest_vendor: row.hydrotest_vendor || null,
     status: uiStatus,
     createdAt: row.created_at,
     created_at: row.created_at,
@@ -153,6 +159,9 @@ export function mapAparToDb(appApar) {
     manufacture_date: appApar.manufactureDate || appApar.manufacture_date || null,
     last_hydrotest_date: appApar.lastHydrotestDate || appApar.last_hydrotest_date || null,
     next_hydrotest_date: appApar.nextHydrotestDate || appApar.next_hydrotest_date || null,
+    hydrotest_doc_url: appApar.hydrotestDocUrl || appApar.hydrotest_doc_url || null,
+    hydrotest_doc_name: appApar.hydrotestDocName || appApar.hydrotest_doc_name || null,
+    hydrotest_vendor: appApar.hydrotestVendor || appApar.hydrotest_vendor || null,
     status: dbStatus,
   };
 }
@@ -405,4 +414,58 @@ export function getTicketBeforePhoto(ticket, inspections = [], allMaintenances =
   }
 
   return null;
+}
+
+// ==========================================
+// 7. HYDROTEST LOGS MAPPER
+// ==========================================
+export function mapHydrotestLogFromDb(row, aparLookup = {}, rigLookup = {}) {
+  if (!row) return null;
+  const apar = aparLookup[row.apar_id] || aparLookup[row.apar_id?.toLowerCase()] || {};
+  const rig = rigLookup[row.rig_id] || rigLookup[apar.rigId] || {};
+
+  return {
+    id: row.id,
+    aparId: row.apar_id,
+    apar_id: row.apar_id,
+    assetCode: apar.assetCode || apar.asset_code || row.apar_id,
+    asset_code: apar.assetCode || apar.asset_code || row.apar_id,
+    rigId: row.rig_id,
+    rig_id: row.rig_id,
+    rigCode: rig.code || row.rig_id,
+    testDate: row.test_date,
+    test_date: row.test_date,
+    nextDueDate: row.next_due_date,
+    next_due_date: row.next_due_date,
+    vendorName: row.vendor_name || 'PT Sepakat HSE Solution',
+    vendor_name: row.vendor_name,
+    certificateNo: row.certificate_no || '-',
+    certificate_no: row.certificate_no,
+    documentData: row.document_data || null,
+    document_data: row.document_data,
+    documentName: row.document_name || 'Dokumen_Hydrotest.pdf',
+    document_name: row.document_name,
+    updatedBy: row.updated_by || 'Admin HSE',
+    updated_by: row.updated_by,
+    notes: row.notes || '',
+    createdAt: row.created_at,
+    created_at: row.created_at,
+  };
+}
+
+export function mapHydrotestLogToDb(log) {
+  if (!log) return null;
+  return {
+    id: log.id,
+    apar_id: log.aparId || log.apar_id,
+    rig_id: log.rigId || log.rig_id,
+    test_date: log.testDate || log.test_date,
+    next_due_date: log.nextDueDate || log.next_due_date,
+    vendor_name: log.vendorName || log.vendor_name || 'PT Sepakat HSE Solution',
+    certificate_no: log.certificateNo || log.certificate_no || '-',
+    document_data: log.documentData || log.document_data || null,
+    document_name: log.documentName || log.document_name || null,
+    updated_by: log.updatedBy || log.updated_by || 'Admin HSE Pusat',
+    notes: log.notes || '',
+  };
 }
