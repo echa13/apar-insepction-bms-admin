@@ -60,8 +60,12 @@ CREATE TABLE IF NOT EXISTS public.inspections (
     checklist JSONB NOT NULL DEFAULT '{}'::jsonb,
     overall_status TEXT NOT NULL DEFAULT 'layak' CHECK (overall_status IN ('layak', 'tidak_layak')),
     notes TEXT,
+    inspection_photo TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Tambahkan kolom inspection_photo jika tabel sudah ada sebelumnya
+ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS inspection_photo TEXT;
 
 -- 6. TABEL maintenances
 CREATE TABLE IF NOT EXISTS public.maintenances (
@@ -74,6 +78,7 @@ CREATE TABLE IF NOT EXISTS public.maintenances (
     action_type TEXT NOT NULL DEFAULT 'perbaikan' CHECK (action_type IN ('perbaikan', 'pergantian', 'isi_ulang', 'hydrotest')),
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'pending_review', 'closed')),
     vendor_name TEXT DEFAULT 'PT Sepakat HSE Solution',
+    finding_photo TEXT,
     evidence_photo TEXT,
     evidence_uploaded_by TEXT,
     repair_notes TEXT,
@@ -81,6 +86,9 @@ CREATE TABLE IF NOT EXISTS public.maintenances (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     resolved_at TIMESTAMPTZ
 );
+
+-- Tambahkan kolom finding_photo jika tabel sudah ada sebelumnya
+ALTER TABLE public.maintenances ADD COLUMN IF NOT EXISTS finding_photo TEXT;
 
 -- ==============================================================================
 -- KEBIJAKAN AKSES ROW LEVEL SECURITY (RLS) UNTUK ANON/PUBLIC KEY

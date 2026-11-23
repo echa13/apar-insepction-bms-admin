@@ -4,6 +4,7 @@ import { getHydrotestStatus, formatHseDate } from '../../shared/utils/hydrotestU
 import AparFormModal from '../components/AparFormModal';
 import ExcelImportModal from '../components/ExcelImportModal';
 import QrPrintModal from '../components/QrPrintModal';
+import InspectionHistoryModal from '../components/InspectionHistoryModal';
 import {
   Flame,
   Search,
@@ -18,7 +19,8 @@ import {
   ShieldAlert,
   CalendarPlus,
   Building2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ClipboardList
 } from 'lucide-react';
 
 export default function AdminAparManage() {
@@ -29,6 +31,7 @@ export default function AdminAparManage() {
   const [editingApar, setEditingApar] = useState(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [historyModalApar, setHistoryModalApar] = useState(null);
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
@@ -362,9 +365,16 @@ export default function AdminAparManage() {
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         <div className="inline-flex items-center gap-1">
                           <button
+                            onClick={() => setHistoryModalApar(apar)}
+                            title="Lihat Log Riwayat Inspeksi HFO Lapangan"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-slate-100 transition cursor-pointer"
+                          >
+                            <ClipboardList className="w-3.5 h-3.5" />
+                          </button>
+                          <button
                             onClick={() => handleCreateSchedule(apar)}
                             title="Jadwalkan Hydrotest / Isi Ulang"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-slate-100 transition"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-slate-100 transition cursor-pointer"
                           >
                             <CalendarPlus className="w-3.5 h-3.5" />
                           </button>
@@ -410,6 +420,13 @@ export default function AdminAparManage() {
       {isQrModalOpen && (
         <QrPrintModal
           onClose={() => setIsQrModalOpen(false)}
+        />
+      )}
+
+      {historyModalApar && (
+        <InspectionHistoryModal
+          apar={historyModalApar}
+          onClose={() => setHistoryModalApar(null)}
         />
       )}
     </div>

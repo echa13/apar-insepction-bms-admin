@@ -14,21 +14,29 @@ import {
   Plus,
   Building2,
   X,
-  FileCheck
+  FileCheck,
+  MapPin,
+  Camera,
+  UserCheck,
+  ZoomIn,
+  AlertTriangle,
+  RotateCcw
 } from 'lucide-react';
+import { notifySuccess, showErrorAlert, confirmActionAlert } from '../../shared/utils/alertUtils';
 
 export default function AdminMaintenances() {
   const { maintenances, apars, rigs, dispatchMaintenance, createManualMaintenance } = useApar();
 
-  // Status Tab
+  // Status Tabs
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'open' | 'in_progress' | 'pending_review' | 'closed'
   const [selectedRig, setSelectedRig] = useState('all');
   const [selectedVerifyTicket, setSelectedVerifyTicket] = useState(null);
 
-  // Dispatch Action Modal State
+  // Dispatch Action Modal State (Tahap 1)
   const [dispatchTicket, setDispatchTicket] = useState(null);
   const [actionType, setActionType] = useState('perbaikan');
   const [vendorName, setVendorName] = useState('PT Sepakat HSE Solution');
+  const [isDispatching, setIsDispatching] = useState(false);
 
   // Manual Ticket Modal State
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -38,6 +46,9 @@ export default function AdminMaintenances() {
     actionType: 'hydrotest',
     vendorName: 'PT Sepakat HSE Solution'
   });
+
+  // Lightbox Image Preview
+  const [previewPhoto, setPreviewPhoto] = useState(null);
 
   const filteredTickets = useMemo(() => {
     return maintenances.filter(m => {
@@ -61,22 +72,30 @@ export default function AdminMaintenances() {
     setVendorName(ticket.vendorName || 'PT Sepakat HSE Solution');
   };
 
-  const handleConfirmDispatch = (e) => {
+  const handleConfirmDispatch = async (e) => {
     e.preventDefault();
     if (!dispatchTicket) return;
-    dispatchMaintenance(dispatchTicket.id, actionType, vendorName);
+
+    setIsDispatching(true);
+    await dispatchMaintenance(dispatchTicket.id, actionType, vendorName);
+    setIsDispatching(false);
     setDispatchTicket(null);
   };
 
-  const handleCreateManual = (e) => {
+  const handleCreateManual = async (e) => {
     e.preventDefault();
     if (!manualForm.aparId) {
-      alert('Pilih tabung APAR.');
+      showErrorAlert('Pilih APAR', 'Harap pilih tabung APAR yang akan dijadwalkan tindakannya.');
       return;
     }
-    createManualMaintenance(manualForm.aparId, manualForm.issueDescription, manualForm.actionType, manualForm.vendorName);
+
+    await createManualMaintenance(
+      manualForm.aparId,
+      manualForm.issueDescription,
+      manualForm.actionType,
+      manualForm.vendorName
+    );
     setIsManualModalOpen(false);
-    alert('Tiket pemeliharaan berhasil dibuat.');
   };
 
   return (
@@ -88,34 +107,34 @@ export default function AdminMaintenances() {
             Tindak Lanjut & Verifikasi Perbaikan
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Siklus alur kerja K3: Tiket Masuk &rarr; Proses Tindakan &rarr; Tinjau Bukti Foto &rarr; Penutupan Tiket.
+            Alur kerja K3: Laporan Baru Masuk &rarr; Tetapkan Tindakan &rarr; Verifikasi Before vs After &rarr; Selesai.
           </p>
         </div>
 
         <button
           onClick={() => setIsManualModalOpen(true)}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-red-600 text-white hover:bg-red-700 transition shadow-md shadow-red-600/20 self-start sm:self-auto"
+          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-red-600 text-white hover:bg-red-700 transition shadow-md shadow-red-600/20 self-start sm:self-auto cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Buat Tiket Pemeliharaan</span>
+          <span>Buat Tiket Pemeliharaan Manual</span>
         </button>
       </div>
 
-      {/* Tabs & Rig Filter */}
+      {/* Tabs Filter Cepat & Filter Rig */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs">
-        {/* Status Tabs */}
+        {/* Status Tabs Sesuai Permintaan */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
           {[
-            { id: 'all', label: 'Semua Tiket', count: counts.all },
-            { id: 'open', label: 'Tiket Masuk', count: counts.open, alert: counts.open > 0 },
-            { id: 'in_progress', label: 'Dikerjakan', count: counts.in_progress },
-            { id: 'pending_review', label: 'Menunggu Verifikasi', count: counts.pending_review, highlight: true },
-            { id: 'closed', label: 'Selesai (Closed)', count: counts.closed },
+            { id: 'all', label: 'Semua', count: counts.all },
+            { id: 'open', label: 'Laporan Baru', count: counts.open, alert: counts.open > 0 },
+            { id: 'in_progress', label: 'Sedang Diproses', count: counts.in_progress },
+            { id: 'pending_review', label: 'Perlu Verifikasi', count: counts.pending_review, highlight: true },
+            { id: 'closed', label: 'Selesai', count: counts.closed },
           ].map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                 activeTab === tab.id
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -129,7 +148,7 @@ export default function AdminMaintenances() {
                     : tab.highlight && tab.count > 0
                     ? 'bg-blue-600 text-white animate-pulse'
                     : tab.alert
-                    ? 'bg-amber-500 text-slate-900'
+                    ? 'bg-amber-500 text-slate-950 font-black'
                     : 'bg-slate-200 text-slate-700'
                 }`}
               >
@@ -139,14 +158,14 @@ export default function AdminMaintenances() {
           ))}
         </div>
 
-        {/* Rig Filter */}
+        {/* Rig Selector */}
         <div className="flex items-center gap-2 shrink-0">
           <Filter className="w-4 h-4 text-slate-400" />
           <span className="text-xs font-semibold text-slate-600">Rig:</span>
           <select
             value={selectedRig}
             onChange={(e) => setSelectedRig(e.target.value)}
-            className="text-xs font-mono font-semibold p-1.5 rounded-lg border border-slate-300 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-red-500"
+            className="text-xs font-mono font-semibold p-2 rounded-lg border border-slate-300 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-red-500"
           >
             <option value="all">Semua Rig</option>
             {rigs.map(r => (
@@ -178,7 +197,7 @@ export default function AdminMaintenances() {
                 key={ticket.id}
                 className={`p-4 sm:p-5 rounded-2xl border bg-white shadow-xs transition hover:shadow-md flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${
                   isPendingReview
-                    ? 'border-blue-300 bg-blue-50/20'
+                    ? 'border-blue-400 bg-blue-50/20'
                     : isOpen
                     ? 'border-amber-300 bg-amber-50/20'
                     : isClosed
@@ -186,60 +205,103 @@ export default function AdminMaintenances() {
                     : 'border-slate-200'
                 }`}
               >
-                {/* Left: Ticket Core Info */}
-                <div className="space-y-1.5 min-w-0 flex-1">
+                {/* Left Section: Information */}
+                <div className="space-y-2 min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-xs font-extrabold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    <span className="font-mono text-xs font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                       {ticket.assetCode}
                     </span>
                     <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
                       <Building2 className="w-3.5 h-3.5 text-slate-400" />
                       {ticket.rigCode}
                     </span>
+                    <span className="text-xs text-slate-500 flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                      {ticket.placement || 'Area Rig Operasional'}
+                    </span>
 
                     {/* Status Badge */}
                     <span
                       className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
                         isOpen
-                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
                           : isInProgress
-                          ? 'bg-slate-100 text-slate-800 border border-slate-200'
+                          ? 'bg-slate-100 text-slate-800 border border-slate-300'
                           : isPendingReview
                           ? 'bg-blue-600 text-white animate-pulse'
-                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                       }`}
                     >
-                      {isOpen ? 'Tiket Masuk' : isInProgress ? 'Dikerjakan' : isPendingReview ? 'Verifikasi Foto' : 'Selesai (Closed)'}
+                      {isOpen
+                        ? 'Laporan Baru'
+                        : isInProgress
+                        ? 'Sedang Diproses'
+                        : isPendingReview
+                        ? 'Perlu Verifikasi (Before vs After)'
+                        : 'Selesai (Closed)'}
                     </span>
                   </div>
 
-                  <h3 className="text-sm font-bold text-slate-900">
+                  {/* Issue Description */}
+                  <h3 className="text-sm font-bold text-slate-900 leading-snug">
                     {ticket.issueDescription}
                   </h3>
 
+                  {/* Metadata Row */}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-0.5">
-                    <span>Pelapor: <strong className="text-slate-800">{ticket.reportedBy || 'HFO Lapangan'}</strong></span>
+                    <span className="flex items-center gap-1">
+                      Pelapor: <strong className="text-slate-800">{ticket.reportedBy || 'HFO Lapangan'}</strong>
+                    </span>
                     {ticket.evidenceUploadedBy && (
-                      <span>Bukti oleh: <strong className="text-blue-700">{ticket.evidenceUploadedBy}</strong></span>
+                      <span className="flex items-center gap-1">
+                        Bukti oleh: <strong className="text-blue-700">{ticket.evidenceUploadedBy}</strong>
+                      </span>
                     )}
-                    <span>Tgl: {formatHseDate(ticket.reportedAt || ticket.createdAt)}</span>
+                    <span>Tgl Laporan: {formatHseDate(ticket.reportedAt || ticket.createdAt)}</span>
                     <span>Tindakan: <strong className="capitalize text-slate-700">{ticket.actionType}</strong></span>
-                    <span>Vendor: <strong className="text-slate-700">{ticket.vendorName || 'PT Sepakat'}</strong></span>
+                    <span>Vendor: <strong className="text-slate-700">{ticket.vendorName || 'PT Sepakat HSE Solution'}</strong></span>
                   </div>
 
+                  {/* Admin Notes Preview */}
                   {ticket.adminNotes && (
-                    <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200 mt-2">
-                      <strong>Catatan Admin:</strong> {ticket.adminNotes}
+                    <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200 mt-1.5 flex items-start gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong>Catatan Admin HSE:</strong> {ticket.adminNotes}
+                      </div>
                     </div>
                   )}
                 </div>
 
-                {/* Right: Action Buttons */}
-                <div className="flex items-center gap-2.5 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                {/* Right Section: Thumbnail Photo & Action Buttons */}
+                <div className="flex items-center gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                  {/* Thumbnail Preview if Photo Available */}
+                  {(ticket.findingPhoto || ticket.evidencePhoto) && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPhoto({
+                        src: ticket.evidencePhoto || ticket.findingPhoto,
+                        title: `${ticket.assetCode} — ${ticket.evidencePhoto ? 'Bukti Perbaikan' : 'Foto Temuan Awal'}`
+                      })}
+                      className="w-12 h-12 rounded-xl border border-slate-200 overflow-hidden relative group shrink-0 shadow-2xs hover:border-blue-400 transition"
+                      title="Klik untuk perbesar foto"
+                    >
+                      <img
+                        src={ticket.evidencePhoto || ticket.findingPhoto}
+                        alt="Thumbnail"
+                        className="w-full h-full object-cover group-hover:scale-110 transition"
+                      />
+                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
+                        <ZoomIn className="w-3.5 h-3.5" />
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Actions Depending on Status */}
                   {isOpen && (
                     <button
                       onClick={() => handleOpenDispatch(ticket)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 text-slate-950 hover:bg-amber-400 transition shadow-xs"
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-500 text-slate-950 hover:bg-amber-400 transition shadow-xs cursor-pointer"
                     >
                       <Send className="w-3.5 h-3.5" />
                       <span>Proses Tindakan</span>
@@ -249,28 +311,31 @@ export default function AdminMaintenances() {
                   {isPendingReview && (
                     <button
                       onClick={() => setSelectedVerifyTicket(ticket)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition shadow-md shadow-blue-600/20"
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition shadow-md shadow-blue-600/20 cursor-pointer"
                     >
                       <Eye className="w-4 h-4" />
-                      <span>Tinjau Bukti Foto</span>
+                      <span>Verifikasi Before vs After</span>
                     </button>
                   )}
 
                   {isInProgress && (
                     <button
                       onClick={() => setSelectedVerifyTicket(ticket)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5" />
-                      <span>Lihat Status</span>
+                      <span>Lihat Status / Detail</span>
                     </button>
                   )}
 
                   {isClosed && (
-                    <div className="flex items-center gap-1 text-emerald-600 text-xs font-semibold">
-                      <FileCheck className="w-4 h-4" />
-                      <span>Terverifikasi</span>
-                    </div>
+                    <button
+                      onClick={() => setSelectedVerifyTicket(ticket)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition cursor-pointer"
+                    >
+                      <FileCheck className="w-3.5 h-3.5" />
+                      <span>Lihat Arsip</span>
+                    </button>
                   )}
                 </div>
               </div>
@@ -279,32 +344,109 @@ export default function AdminMaintenances() {
         )}
       </div>
 
-      {/* Modal Dispatch Maintenance */}
+      {/* ========================================================================= */}
+      {/* MODAL TAHAP 1: TERIMA LAPORAN BARU & TETAPKAN TINDAKAN */}
+      {/* ========================================================================= */}
       {dispatchTicket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-              <h2 className="text-sm font-bold">Tetapkan Tindakan Perbaikan</h2>
-              <button onClick={() => setDispatchTicket(null)} className="text-slate-400 hover:text-white">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center">
+                  <Send className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold">Tahap 1 — Proses Laporan Kerusakan</h2>
+                  <p className="text-[10px] text-slate-400">Tetapkan jenis tindakan dan vendor pelaksana</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDispatchTicket(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {/* Content Form */}
             <form onSubmit={handleConfirmDispatch} className="p-6 space-y-4 text-xs">
-              <div>
-                <span className="text-slate-400 block text-[11px]">Kode Aset</span>
-                <span className="font-mono font-bold text-sm text-slate-900">{dispatchTicket.assetCode} ({dispatchTicket.rigCode})</span>
+              {/* Detail Laporan Masuk */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Kode Aset APAR</span>
+                    <span className="font-mono font-bold text-slate-900 text-xs">
+                      {dispatchTicket.assetCode}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Rig Operasional</span>
+                    <span className="font-semibold text-slate-800">
+                      {dispatchTicket.rigCode}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Penempatan</span>
+                    <span className="font-medium text-slate-700">
+                      {dispatchTicket.placement || 'Area Rig Operasional'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Pelapor (HFO)</span>
+                    <span className="font-bold text-slate-800">
+                      {dispatchTicket.reportedBy || 'HFO Lapangan'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200">
+                  <span className="text-slate-400 block text-[11px] mb-0.5">Deskripsi Kerusakan:</span>
+                  <p className="font-semibold text-slate-900 bg-white p-2 rounded border border-slate-200">
+                    {dispatchTicket.issueDescription}
+                  </p>
+                </div>
+
+                {/* Preview Foto Temuan Awal */}
+                <div className="pt-2 border-t border-slate-200">
+                  <span className="text-slate-400 block text-[11px] mb-1">Foto Temuan Awal:</span>
+                  {dispatchTicket.findingPhoto ? (
+                    <div className="relative rounded-lg overflow-hidden border border-slate-200 h-32 bg-slate-900 flex items-center justify-center">
+                      <img
+                        src={dispatchTicket.findingPhoto}
+                        alt="Temuan Awal"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPreviewPhoto({ src: dispatchTicket.findingPhoto, title: `Foto Temuan Awal — ${dispatchTicket.assetCode}` })}
+                        className="absolute bottom-2 right-2 px-2 py-1 rounded bg-slate-950/80 text-white text-[10px] font-semibold flex items-center gap-1"
+                      >
+                        <ZoomIn className="w-3 h-3" />
+                        <span>Perbesar</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-lg bg-white border border-dashed border-slate-300 text-slate-400 text-center flex items-center justify-center gap-1.5">
+                      <Camera className="w-4 h-4 text-slate-300" />
+                      <span>Foto temuan awal tidak dilampirkan oleh pelapor</span>
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* Form Input Tindakan */}
               <div>
                 <label className="block font-bold text-slate-700 uppercase mb-1">
-                  Jenis Tindakan *
+                  Pilih Jenis Tindakan K3 *
                 </label>
                 <select
                   value={actionType}
                   onChange={(e) => setActionType(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-red-500"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-red-500"
                 >
-                  <option value="perbaikan">Perbaikan Komponen (Hose, Handle, Nozzle)</option>
-                  <option value="pergantian">Pergantian Tabung / Unit Baru</option>
+                  <option value="perbaikan">Perbaikan Komponen (Hose, Handle, Nozzle, dll.)</option>
+                  <option value="pergantian">Pergantian Tabung / Unit APAR Baru</option>
                   <option value="isi_ulang">Isi Ulang Media Pemadam (Refill N2 / Powder)</option>
                   <option value="hydrotest">Uji Tekan (Hydrotest) 5 Tahun</option>
                 </select>
@@ -312,30 +454,33 @@ export default function AdminMaintenances() {
 
               <div>
                 <label className="block font-bold text-slate-700 uppercase mb-1">
-                  Nama Vendor / Pihak Ke-3
+                  Nama Vendor / Pelaksana Pihak Ke-3
                 </label>
                 <input
                   type="text"
                   value={vendorName}
                   onChange={(e) => setVendorName(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-red-500"
+                  placeholder="PT Sepakat HSE Solution"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-red-500"
                   required
                 />
               </div>
 
+              {/* Action Buttons */}
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setDispatchTicket(null)}
-                  className="px-3.5 py-2 border rounded-xl font-semibold text-slate-600 hover:bg-slate-50"
+                  className="px-4 py-2 border rounded-xl font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl hover:bg-amber-400 shadow-xs"
+                  disabled={isDispatching}
+                  className="px-5 py-2.5 bg-amber-500 text-slate-950 font-bold rounded-xl hover:bg-amber-400 transition shadow-xs cursor-pointer disabled:opacity-50"
                 >
-                  Terbitkan Surat Perintah (In Progress)
+                  {isDispatching ? 'Memproses...' : 'Proses Tindakan (In Progress)'}
                 </button>
               </div>
             </form>
@@ -343,7 +488,9 @@ export default function AdminMaintenances() {
         </div>
       )}
 
-      {/* Modal Buat Tiket Manual */}
+      {/* ========================================================================= */}
+      {/* MODAL BUAT TIKET PEMELIHARAAN MANUAL */}
+      {/* ========================================================================= */}
       {isManualModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
@@ -361,7 +508,7 @@ export default function AdminMaintenances() {
                 <select
                   value={manualForm.aparId}
                   onChange={(e) => setManualForm({ ...manualForm, aparId: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-semibold focus:ring-2 focus:ring-red-500"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-semibold focus:ring-2 focus:ring-red-500"
                   required
                 >
                   {apars.map(a => (
@@ -374,29 +521,29 @@ export default function AdminMaintenances() {
 
               <div>
                 <label className="block font-bold text-slate-700 uppercase mb-1">
-                  Jenis Tindakan Terjadwal *
+                  Jenis Tindakan *
                 </label>
                 <select
                   value={manualForm.actionType}
                   onChange={(e) => setManualForm({ ...manualForm, actionType: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-red-500"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-red-500"
                 >
                   <option value="hydrotest">Uji Tekan (Hydrotest) 5 Tahun</option>
                   <option value="isi_ulang">Isi Ulang Terjadwal</option>
-                  <option value="perbaikan">Perbaikan Fisik Terjadwal</option>
+                  <option value="perbaikan">Perbaikan Komponen Fisik</option>
                   <option value="pergantian">Pergantian Tabung Baru</option>
                 </select>
               </div>
 
               <div>
                 <label className="block font-bold text-slate-700 uppercase mb-1">
-                  Keterangan Tindakan
+                  Keterangan Perbaikan
                 </label>
                 <input
                   type="text"
                   value={manualForm.issueDescription}
                   onChange={(e) => setManualForm({ ...manualForm, issueDescription: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-red-500"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-red-500"
                   required
                 />
               </div>
@@ -409,7 +556,7 @@ export default function AdminMaintenances() {
                   type="text"
                   value={manualForm.vendorName}
                   onChange={(e) => setManualForm({ ...manualForm, vendorName: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-red-500"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-red-500"
                   required
                 />
               </div>
@@ -418,15 +565,15 @@ export default function AdminMaintenances() {
                 <button
                   type="button"
                   onClick={() => setIsManualModalOpen(false)}
-                  className="px-3.5 py-2 border rounded-xl font-semibold text-slate-600 hover:bg-slate-50"
+                  className="px-3.5 py-2 border rounded-xl font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 shadow-xs"
+                  className="px-4 py-2 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 shadow-xs cursor-pointer"
                 >
-                  Buat Tiket Terjadwal
+                  Buat Tiket
                 </button>
               </div>
             </form>
@@ -434,12 +581,38 @@ export default function AdminMaintenances() {
         </div>
       )}
 
-      {/* Modal Verifikasi Bukti Foto (Side-by-side) */}
+      {/* ========================================================================= */}
+      {/* MODAL VERIFIKASI BEFORE VS AFTER */}
+      {/* ========================================================================= */}
       {selectedVerifyTicket && (
         <MaintenanceVerifyModal
           ticket={selectedVerifyTicket}
           onClose={() => setSelectedVerifyTicket(null)}
         />
+      )}
+
+      {/* Lightbox Quick Viewer */}
+      {previewPhoto && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+          <div className="max-w-3xl w-full bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col">
+            <div className="px-4 py-3 bg-slate-950 flex items-center justify-between text-white border-b border-slate-800">
+              <span className="text-xs font-bold">{previewPhoto.title}</span>
+              <button
+                onClick={() => setPreviewPhoto(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 flex items-center justify-center max-h-[75vh] overflow-auto">
+              <img
+                src={previewPhoto.src}
+                alt={previewPhoto.title}
+                className="max-h-[70vh] w-auto rounded-lg object-contain"
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -46,6 +46,12 @@ export function AparProvider({ children }) {
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const isFirstLoadRef = useRef(true);
 
+  // Reference hooks agar Realtime callback selalu mengakses data terbaru tanpa re-subscribe berulang
+  const rigsRef = useRef(rigs);
+  rigsRef.current = rigs;
+  const aparsRef = useRef(apars);
+  aparsRef.current = apars;
+
   // Sesi Login Pengguna — SATU-SATUNYA yang disimpan di localStorage
   const [currentUser, setCurrentUser] = useState(() => {
     try {
@@ -173,9 +179,9 @@ export function AparProvider({ children }) {
     loadAllFromSupabase(false);
   }, [loadAllFromSupabase]);
 
-  // =========================================================================
+  // ==========================================
   // 2. SUPABASE REALTIME SUBSCRIPTION (channel: 'apar-sync')
-  // =========================================================================
+  // ==========================================
   useEffect(() => {
     const channel = supabase
       .channel('apar-sync')
@@ -184,7 +190,7 @@ export function AparProvider({ children }) {
         { event: '*', schema: 'public', table: 'apars' },
         (payload) => {
           const rigLookup = {};
-          rigs.forEach(r => { rigLookup[r.id] = r; });
+          rigsRef.current.forEach(r => { rigLookup[r.id] = r; rigLookup[r.code] = r; });
 
           if (payload.eventType === 'INSERT') {
             const item = mapAparFromDb(payload.new, rigLookup);
@@ -203,19 +209,24 @@ export function AparProvider({ children }) {
         { event: '*', schema: 'public', table: 'maintenances' },
         (payload) => {
           const aparLookup = {};
-          apars.forEach(a => { aparLookup[a.id] = a; });
+          aparsRef.current.forEach(a => { aparLookup[a.id] = a; aparLookup[a.assetCode] = a; });
           const rigLookup = {};
-          rigs.forEach(r => { rigLookup[r.id] = r; });
+          rigsRef.current.forEach(r => { rigLookup[r.id] = r; rigLookup[r.code] = r; });
 
           if (payload.eventType === 'INSERT') {
             const item = mapMaintenanceFromDb(payload.new, aparLookup, rigLookup);
             setMaintenances(prev => [item, ...prev.filter(m => m.id !== item.id)]);
-            notifyWarning(`Tiket kerusakan baru diterima dari ${item.reportedBy} (${item.assetCode})`);
+            // Perbarui juga status APAR lokal agar selaras
+            setApars(prev => prev.map(a => (a.id === item.aparId || a.assetCode === item.assetCode) ? { ...a, status: 'rusak' } : a));
+            notifyWarning(`Laporan kerusakan baru (${item.assetCode}) diterima dari ${item.reportedBy}!`);
           } else if (payload.eventType === 'UPDATE') {
             const item = mapMaintenanceFromDb(payload.new, aparLookup, rigLookup);
             setMaintenances(prev => prev.map(m => m.id === item.id ? { ...m, ...item } : m));
+
             if (item.status === 'pending_review') {
-              notifyInfo(`Foto bukti baru diunggah oleh ${item.evidenceUploadedBy || 'User'} (${item.assetCode})`);
+              notifyInfo(`Foto bukti perbaikan diunggah oleh ${item.evidenceUploadedBy || 'User'} (${item.assetCode})! Menunggu verifikasi Before vs After.`);
+            } else if (item.status === 'closed') {
+              setApars(prev => prev.map(a => (a.id === item.aparId || a.assetCode === item.assetCode) ? { ...a, status: 'layak', issues: [] } : a));
             }
           } else if (payload.eventType === 'DELETE') {
             setMaintenances(prev => prev.filter(m => m.id !== payload.old.id));
@@ -228,7 +239,42 @@ export function AparProvider({ children }) {
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const item = mapInspectionFromDb(payload.new);
-            setInspections(prev => [item, ...prev]);
+            setInspections(prev => [item, ...prev.filter(i => i.id !== item.id)]);
+
+            // SINKRONISASI OTOMATIS: Update state APAR terkait agar Dashboard, Recharts, dan Riwayat langsung reaktif
+            const isDamaged = item.overallStatus === 'tidak_layak';
+            setApars(prev => prev.map(a => {
+              if (a.id === item.aparId || a.assetCode === item.aparId) {
+                return {
+                  ...a,
+                  status: isDamaged ? 'rusak' : 'layak',
+                  lastInspectionDate: item.inspectionDate,
+                  components: {
+                    ...a.components,
+                    handle: item.checklist?.handle || a.components?.handle || 'bagus',
+                    hose: item.checklist?.hose || a.components?.hose || 'bagus',
+                    nozle: item.checklist?.nozzle || a.components?.nozle || 'bagus',
+                    pengamanTabung: item.checklist?.cylinderGuard || a.components?.pengamanTabung || 'bagus',
+                    pinHandle: item.checklist?.pinHandle || a.components?.pinHandle || 'bagus',
+                    pressureGauge: item.checklist?.pressureGauge || a.components?.pressureGauge || 'bagus',
+                    tabung: item.checklist?.cylinder || a.components?.tabung || 'bagus',
+                  },
+                  issues: isDamaged ? [item.notes || 'Temuan ketidaksesuaian inspeksi lapangan'] : []
+                };
+              }
+              return a;
+            }));
+
+            if (isDamaged) {
+              notifyWarning(`Temuan APAR TIDAK LAYAK dilaporkan oleh ${item.inspectorName || 'HFO Lapangan'} (${item.rigId})!`);
+            } else {
+              notifyInfo(`Inspeksi APAR baru diselesaikan oleh ${item.inspectorName || 'HFO Lapangan'} (${item.rigId}).`);
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const item = mapInspectionFromDb(payload.new);
+            setInspections(prev => prev.map(i => i.id === item.id ? { ...i, ...item } : i));
+          } else if (payload.eventType === 'DELETE') {
+            setInspections(prev => prev.filter(i => i.id !== payload.old.id));
           }
         }
       )
@@ -245,7 +291,7 @@ export function AparProvider({ children }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [rigs, apars]);
+  }, []);
 
   // =========================================================================
   // 3. ACTION CRUD APAR (Tabel 'apars')
@@ -465,8 +511,9 @@ export function AparProvider({ children }) {
 
       if (error) {
         console.warn('Supabase dispatch notice:', error.message);
+        notifyWarning(`Peringatan Supabase: ${error.message}`);
       } else {
-        notifySuccess('Perintah perbaikan diterbitkan (Status: In Progress).');
+        notifySuccess('Perintah tindakan berhasil diproses. User di lapangan sekarang dapat mengunggah bukti perbaikan.');
       }
     } catch (e) {
       console.warn('Supabase dispatchMaintenance error:', e);
@@ -511,61 +558,60 @@ export function AparProvider({ children }) {
     if (!targetTicket) return;
 
     if (isApproved) {
-      // Tutup Tiket
+      // 1. Tutup Tiket
       setMaintenances(prev => prev.map(m => {
         if (m.id !== maintenanceId) return m;
         return {
           ...m,
           status: 'closed',
-          adminNotes: adminNotes || 'Disetujui Admin HSE.',
+          adminNotes: adminNotes || 'Disetujui Admin HSE. Hasil perbaikan valid.',
           resolvedAt: nowIso
         };
       }));
 
-      // Pulihkan APAR menjadi Layak
-      let updatedApar = null;
-      setApars(prev => prev.map(apar => {
-        if (apar.id !== targetTicket.aparId) return apar;
-        const isHydrotest = targetTicket.actionType === 'hydrotest';
-        const nextHydro = isHydrotest ? calculateNextHydrotestDate(today) : apar.nextHydrotestDate;
+      // 2. Pulihkan APAR menjadi Layak & perbarui tanggal hydrotest jika uji tekan
+      const isHydrotest = targetTicket.actionType === 'hydrotest';
+      const nextHydro = isHydrotest ? calculateNextHydrotestDate(today) : null;
 
-        updatedApar = {
+      let targetAparRealId = targetTicket.aparId;
+      setApars(prev => prev.map(apar => {
+        if (apar.id !== targetTicket.aparId && apar.assetCode !== targetTicket.assetCode) return apar;
+        targetAparRealId = apar.id;
+        return {
           ...apar,
           status: 'layak',
           issues: [],
           lastHydrotestDate: isHydrotest ? today : apar.lastHydrotestDate,
-          nextHydrotestDate: nextHydro
+          nextHydrotestDate: isHydrotest ? nextHydro : apar.nextHydrotestDate
         };
-        return updatedApar;
       }));
 
-      notifySuccess(`Tiket disetujui & ditutup. APAR kembali berstatus LAYAK.`);
+      notifySuccess('Tiket berhasil disetujui & ditutup. Status APAR otomatis kembali LAYAK.');
 
-      // Update Supabase
+      // 3. Update Supabase
       try {
         await supabase.from('maintenances').update({
           status: 'closed',
-          admin_notes: adminNotes || 'Disetujui Admin HSE.',
+          admin_notes: adminNotes || 'Disetujui Admin HSE. Hasil perbaikan valid.',
           resolved_at: nowIso
         }).eq('id', maintenanceId);
 
-        if (updatedApar) {
-          const isHydrotest = targetTicket.actionType === 'hydrotest';
+        if (targetAparRealId) {
           const aparUpdates = {
             status: 'layak',
             ...(isHydrotest ? {
               last_hydrotest_date: today,
-              next_hydrotest_date: calculateNextHydrotestDate(today)
+              next_hydrotest_date: nextHydro
             } : {})
           };
-          await supabase.from('apars').update(aparUpdates).eq('id', targetTicket.aparId);
+          await supabase.from('apars').update(aparUpdates).eq('id', targetAparRealId);
         }
       } catch (e) {
         console.warn('Supabase verifyMaintenance error:', e);
       }
     } else {
       // Tolak / Kembalikan ke Lapangan
-      const rejectNote = adminNotes || 'Foto bukti tidak memenuhi standar K3 / perlu perbaikan ulang.';
+      const rejectNote = adminNotes?.trim() || 'Foto bukti tidak memenuhi standar K3 / perlu perbaikan ulang.';
       setMaintenances(prev => prev.map(m => {
         if (m.id !== maintenanceId) return m;
         return {
@@ -575,7 +621,7 @@ export function AparProvider({ children }) {
         };
       }));
 
-      notifyWarning('Tiket ditolak dan dikembalikan ke personil lapangan.');
+      notifyWarning('Tiket ditolak dan dikembalikan ke status Dikerjakan. Catatan revisi telah dikirim ke lapangan.');
 
       try {
         await supabase.from('maintenances').update({
