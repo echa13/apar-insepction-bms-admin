@@ -16,6 +16,7 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
+import { confirmActionAlert } from '../../shared/utils/alertUtils';
 
 export default function AdminRigs() {
   const { rigs, apars, addRig, toggleRigStatus, hfoUsers, resetHfoPassword } = useApar();
@@ -25,18 +26,23 @@ export default function AdminRigs() {
   const [newRig, setNewRig] = useState({ code: '', name: '', location: '' });
   const [showPasswords, setShowPasswords] = useState({});
 
-  const handleCreateRig = (e) => {
+  const handleCreateRig = async (e) => {
     e.preventDefault();
     if (!newRig.code.trim()) return;
-    addRig(newRig.code, newRig.name, newRig.location);
+    await addRig(newRig.code, newRig.name, newRig.location);
     setNewRig({ code: '', name: '', location: '' });
     setIsAddModalOpen(false);
   };
 
-  const handleResetPassword = (user) => {
-    if (window.confirm(`Reset password akun HFO "${user.name}" kembali ke default "123456"?`)) {
-      resetHfoPassword(user.id, '123456');
-      alert(`Password untuk ${user.name} berhasil di-reset menjadi: 123456`);
+  const handleResetPassword = async (user) => {
+    const result = await confirmActionAlert({
+      title: 'Reset Password Akun HFO?',
+      text: `Password untuk ${user.name} (${user.position || 'HFO'}) akan di-reset kembali ke "123456" di Supabase.`,
+      confirmButtonText: 'Ya, Reset Password',
+      confirmButtonColor: '#f59e0b'
+    });
+    if (result.isConfirmed) {
+      await resetHfoPassword(user.id, '123456');
     }
   };
 

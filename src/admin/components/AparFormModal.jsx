@@ -44,7 +44,9 @@ export default function AparFormModal({ apar, onClose }) {
 
   const calculatedNextHydrotest = calculateNextHydrotestDate(formData.manufactureDate);
 
-  const handleSubmit = (e) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     // Deteksi jika ada komponen yang rusak
@@ -70,13 +72,19 @@ export default function AparFormModal({ apar, onClose }) {
       status: statusFinal
     };
 
-    if (isEditing) {
-      updateApar(apar.id, payload);
-    } else {
-      addApar(payload);
+    try {
+      setIsSubmitting(true);
+      if (isEditing) {
+        await updateApar(apar.id, payload);
+      } else {
+        await addApar(payload);
+      }
+      onClose();
+    } catch {
+      // Error handled with Alert in AparContext
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onClose();
   };
 
   return (
@@ -315,10 +323,11 @@ export default function AparFormModal({ apar, onClose }) {
             </button>
             <button
               type="submit"
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-red-600 text-white hover:bg-red-700 transition shadow-md shadow-red-600/20"
+              disabled={isSubmitting}
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-red-600 text-white hover:bg-red-700 transition shadow-md shadow-red-600/20 disabled:opacity-50 cursor-pointer"
             >
               <Save className="w-4 h-4" />
-              <span>{isEditing ? 'Simpan Perubahan' : 'Tambahkan APAR'}</span>
+              <span>{isSubmitting ? 'Menyimpan...' : (isEditing ? 'Simpan Perubahan' : 'Tambahkan APAR')}</span>
             </button>
           </div>
         </form>

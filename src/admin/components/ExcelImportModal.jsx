@@ -69,11 +69,17 @@ export default function ExcelImportModal({ onClose }) {
     }
   };
 
-  const handleConfirmImport = () => {
+  const handleConfirmImport = async () => {
     if (!parsedData || parsedData.length === 0) return;
-    bulkImportApars(parsedData);
-    alert(`Berhasil mengimpor ${parsedData.length} data APAR ke inventaris.`);
-    onClose();
+    try {
+      setIsLoading(true);
+      await bulkImportApars(parsedData);
+      onClose();
+    } catch {
+      // Error handled in context
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

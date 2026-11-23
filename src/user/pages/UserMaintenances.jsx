@@ -36,8 +36,7 @@ export default function UserMaintenances() {
   const handleConfirmUpload = (e) => {
     e.preventDefault();
     if (!uploadModalTicket) return;
-    submitEvidence(uploadModalTicket.id, evidencePhoto, repairNotes);
-    alert('Foto bukti berhasil diunggah! Tiket kini berstatus Menunggu Verifikasi Admin HSE.');
+    submitEvidence(uploadModalTicket.id, evidencePhoto, repairNotes, currentUser?.name || 'HFO Lapangan');
     setUploadModalTicket(null);
   };
 

@@ -16,7 +16,7 @@ import { formatHseDate } from '../../shared/utils/hydrotestUtils';
 export default function UserInspect() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { apars, recordInspection } = useApar();
+  const { apars, recordInspection, currentUser } = useApar();
 
   const targetApar = apars.find(a => a.id === id);
 
@@ -33,6 +33,7 @@ export default function UserInspect() {
   );
 
   const [issueNotes, setIssueNotes] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
 
   if (!targetApar) {
@@ -71,10 +72,17 @@ export default function UserInspect() {
       damagedComps.push(issueNotes.trim());
     }
 
+    const defaultInspectionPhoto = damagedComps.length > 0
+      ? 'https://images.unsplash.com/photo-1599423300746-b62533397364?auto=format&fit=crop&w=800&q=80'
+      : 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80';
+
     recordInspection(targetApar.id, {
       components,
       issues: damagedComps,
-      inspectorName: 'Inspector Lapangan'
+      inspectorName: currentUser?.name || 'HFO Lapangan',
+      inspectionPhoto: photoUrl.trim() || defaultInspectionPhoto,
+      category: 'bulanan',
+      thirdPartyVendor: targetApar.vendor || 'PT Sepakat HSE Solution'
     });
 
     setIsSuccess(true);
@@ -206,17 +214,32 @@ export default function UserInspect() {
         </div>
 
         {/* Additional Issue Note */}
-        <div className="pt-2">
-          <label className="block text-xs font-bold text-slate-700 mb-1">
-            Catatan Tambahan Temuan di Lapangan:
-          </label>
-          <input
-            type="text"
-            placeholder="Contoh: Selang retak halus, pin segel kendor, atau cat mengelupas..."
-            value={issueNotes}
-            onChange={(e) => setIssueNotes(e.target.value)}
-            className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          />
+        <div className="pt-2 space-y-3">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Catatan Tambahan Temuan di Lapangan:
+            </label>
+            <input
+              type="text"
+              placeholder="Contoh: Selang retak halus, pin segel kendor, atau cat mengelupas..."
+              value={issueNotes}
+              onChange={(e) => setIssueNotes(e.target.value)}
+              className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              URL / Link Foto Fisik Inspeksi (Opsional):
+            </label>
+            <input
+              type="url"
+              placeholder="https://... (Foto default terpasang otomatis jika dikosongkan)"
+              value={photoUrl}
+              onChange={(e) => setPhotoUrl(e.target.value)}
+              className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
 
         {isSuccess ? (

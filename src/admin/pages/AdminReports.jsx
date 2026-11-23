@@ -346,9 +346,10 @@ export default function AdminReports() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-slate-900 text-slate-300 font-semibold sticky top-0 z-10 text-[11px] uppercase tracking-wider">
                   <tr>
-                    <th className="px-4 py-3">Tanggal</th>
+                    <th className="px-4 py-3">Tanggal & Kategori</th>
                     <th className="px-4 py-3">Rig & Kode Aset</th>
-                    <th className="px-4 py-3">Petugas HFO (Inspector)</th>
+                    <th className="px-4 py-3">Petugas HFO & Vendor</th>
+                    <th className="px-4 py-3">Checklist 7 Titik</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Foto Inspeksi</th>
                     <th className="px-4 py-3">Catatan / Temuan</th>
@@ -357,7 +358,7 @@ export default function AdminReports() {
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {filteredInspections.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
+                      <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
                         Tidak ada catatan inspeksi yang sesuai dengan kriteria filter.
                       </td>
                     </tr>
@@ -388,15 +389,57 @@ export default function AdminReports() {
                             </div>
                           </td>
 
-                          {/* Petugas HFO */}
+                          {/* Petugas HFO & Vendor */}
                           <td className="px-4 py-3 whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
                               <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[10px]">
                                 <UserCheck className="w-3.5 h-3.5" />
                               </div>
-                              <span className="font-bold text-slate-800">
-                                {insp.inspectorName || 'HFO Lapangan'}
-                              </span>
+                              <div>
+                                <span className="font-bold text-slate-800 block">
+                                  {insp.inspectorName || 'HFO Lapangan'}
+                                </span>
+                                {insp.thirdPartyVendor && (
+                                  <span className="text-[10px] text-slate-400">
+                                    {insp.thirdPartyVendor}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Checklist 7 Titik Fisik */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex items-center gap-1">
+                              {[
+                                { key: 'handle', label: 'Hdl' },
+                                { key: 'hose', label: 'Hse' },
+                                { key: 'nozzle', label: 'Noz' },
+                                { key: 'cylinder', label: 'Tbg' },
+                                { key: 'pinHandle', label: 'Pin' },
+                                { key: 'pressureGauge', label: 'Gag' },
+                                { key: 'cylinderGuard', label: 'Grd' },
+                              ].map(comp => {
+                                const val = insp.checklist?.[comp.key] || 'bagus';
+                                const isDamaged = val === 'rusak';
+                                const isNa = val === 'na';
+
+                                return (
+                                  <span
+                                    key={comp.key}
+                                    title={`${comp.label}: ${val.toUpperCase()}`}
+                                    className={`px-1 py-0.5 rounded text-[9px] font-mono font-bold ${
+                                      isDamaged
+                                        ? 'bg-rose-500 text-white'
+                                        : isNa
+                                        ? 'bg-slate-200 text-slate-500'
+                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    }`}
+                                  >
+                                    {comp.label}
+                                  </span>
+                                );
+                              })}
                             </div>
                           </td>
 

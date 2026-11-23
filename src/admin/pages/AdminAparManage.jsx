@@ -22,6 +22,7 @@ import {
   FileSpreadsheet,
   ClipboardList
 } from 'lucide-react';
+import { confirmActionAlert } from '../../shared/utils/alertUtils';
 
 export default function AdminAparManage() {
   const { apars, rigs, aparTypes, deleteApar, createManualMaintenance } = useApar();
@@ -84,9 +85,15 @@ export default function AdminAparManage() {
     });
   }, [apars, searchQuery, selectedRig, selectedType, selectedCharge, selectedStatus, selectedHydroStatus]);
 
-  const handleDelete = (apar) => {
-    if (window.confirm(`Hapus tabung APAR ${apar.assetCode} dari inventaris?`)) {
-      deleteApar(apar.id);
+  const handleDelete = async (apar) => {
+    const result = await confirmActionAlert({
+      title: 'Hapus Tabung APAR?',
+      text: `Tabung ${apar.assetCode} (${apar.rigCode}) akan dihapus permanen dari Supabase.`,
+      confirmButtonText: 'Ya, Hapus',
+      confirmButtonColor: '#dc2626'
+    });
+    if (result.isConfirmed) {
+      await deleteApar(apar.id);
     }
   };
 

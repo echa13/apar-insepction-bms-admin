@@ -107,6 +107,9 @@ CREATE INDEX idx_maintenances_rig_status ON maintenances(rig_id, status);
 ALTER PUBLICATION supabase_realtime ADD TABLE apars;
 ALTER PUBLICATION supabase_realtime ADD TABLE maintenances;
 ALTER PUBLICATION supabase_realtime ADD TABLE inspections;
+ALTER PUBLICATION supabase_realtime ADD TABLE rigs;
+ALTER PUBLICATION supabase_realtime ADD TABLE apar_types;
+ALTER PUBLICATION supabase_realtime ADD TABLE hfo_users;
 
 -- ======================================================================================
 -- 3. INSERT INITIAL SEED DATA (224 APAR, 48 HFO + ADMIN, 16 RIG)
