@@ -1,192 +1,698 @@
--- ==============================================================================
--- SKEMA DATABASE SUPABASE: SISTEM TRACKING & INSPEKSI APAR (K3 BMS)
--- Selaras 100% Antara Proyek ADMIN dan Proyek USER
--- Jalankan skrip ini pada Supabase SQL Editor (https://supabase.com/dashboard/project/vekfijwvhzphqvkbjltb/sql)
--- ==============================================================================
+-- ======================================================================================
+-- SISTEM TRACKING & INSPEKSI APAR ARMADA RIG - PT BUMI MEKAR SAKTI (BMS)
+-- Database: Supabase / PostgreSQL (100% SINKRON DENGAN PROYEK USER & ADMIN)
+-- File: database/schema_and_seeds.sql
+-- ======================================================================================
 
--- 1. TABEL rigs
-CREATE TABLE IF NOT EXISTS public.rigs (
-    id TEXT PRIMARY KEY,
-    code TEXT NOT NULL UNIQUE,
-    name TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'aktif' CHECK (status IN ('aktif', 'nonaktif'))
+-- 1. DROP TABEL DARI CHILD KE PARENT
+DROP TABLE IF EXISTS maintenances CASCADE;
+DROP TABLE IF EXISTS inspections CASCADE;
+DROP TABLE IF EXISTS apars CASCADE;
+DROP TABLE IF EXISTS hfo_users CASCADE;
+DROP TABLE IF EXISTS apar_types CASCADE;
+DROP TABLE IF EXISTS rigs CASCADE;
+
+-- 2. DDL SCHEMA (6 TABEL SUPABASE STANDAR PERSIS)
+-- 2.1 TABEL RIGS (16 Rig Operasional BMS)
+CREATE TABLE rigs (
+  id VARCHAR(20) PRIMARY KEY,
+  code VARCHAR(20) NOT NULL UNIQUE,
+  name VARCHAR(50) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'aktif' CHECK (status IN ('aktif', 'nonaktif')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2. TABEL apar_types
-CREATE TABLE IF NOT EXISTS public.apar_types (
-    id TEXT PRIMARY KEY,
-    media TEXT NOT NULL,
-    capacity_label TEXT NOT NULL,
-    has_pressure_gauge BOOLEAN NOT NULL DEFAULT true,
-    hydrotest_years INTEGER NOT NULL DEFAULT 5
+-- 2.2 TABEL APAR_TYPES (7 Tipe Standar)
+CREATE TABLE apar_types (
+  id VARCHAR(50) PRIMARY KEY,
+  media VARCHAR(50) NOT NULL,
+  capacity_label VARCHAR(50) NOT NULL,
+  has_pressure_gauge BOOLEAN NOT NULL DEFAULT TRUE,
+  hydrotest_years INT NOT NULL DEFAULT 5,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3. TABEL hfo_users
-CREATE TABLE IF NOT EXISTS public.hfo_users (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    rig_id TEXT REFERENCES public.rigs(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    position TEXT NOT NULL DEFAULT 'HFO Officer',
-    role TEXT NOT NULL DEFAULT 'user',
-    password TEXT NOT NULL DEFAULT '123456'
+-- 2.3 TABEL HFO_USERS (48 Akun Personel HFO & Akun Admin Pusat)
+CREATE TABLE hfo_users (
+  id VARCHAR(50) PRIMARY KEY,
+  rig_id VARCHAR(20) REFERENCES rigs(id) ON DELETE CASCADE,
+  name VARCHAR(100) NOT NULL,
+  position VARCHAR(50) DEFAULT 'HFO',
+  role VARCHAR(20) DEFAULT 'user',
+  password VARCHAR(100) NOT NULL DEFAULT '123456',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 4. TABEL apars
-CREATE TABLE IF NOT EXISTS public.apars (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    asset_code TEXT NOT NULL UNIQUE,
-    rig_id TEXT REFERENCES public.rigs(id) ON DELETE CASCADE,
-    apar_type_id TEXT REFERENCES public.apar_types(id) ON DELETE RESTRICT,
-    brand_model TEXT,
-    serial_no TEXT,
-    placement TEXT NOT NULL,
-    charge_owner TEXT NOT NULL DEFAULT 'BMS',
-    manufacture_date DATE,
-    last_hydrotest_date DATE,
-    next_hydrotest_date DATE,
-    status TEXT NOT NULL DEFAULT 'layak' CHECK (status IN ('layak', 'perlu_perbaikan', 'afkir')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+-- 2.4 TABEL APARS (224 Unit APAR di 16 Rig)
+CREATE TABLE apars (
+  id VARCHAR(50) PRIMARY KEY,
+  asset_code VARCHAR(50) NOT NULL UNIQUE,
+  rig_id VARCHAR(20) NOT NULL REFERENCES rigs(id) ON DELETE CASCADE,
+  apar_type_id VARCHAR(50) NOT NULL REFERENCES apar_types(id) ON DELETE RESTRICT,
+  brand_model VARCHAR(100) DEFAULT 'BMS Standard',
+  serial_no VARCHAR(50) DEFAULT '-',
+  placement VARCHAR(100) NOT NULL DEFAULT 'Area Kerja Rig',
+  charge_owner VARCHAR(20) NOT NULL DEFAULT 'BMS' CHECK (charge_owner IN ('BMS', 'APM')),
+  manufacture_date DATE,
+  last_hydrotest_date DATE,
+  next_hydrotest_date DATE,
+  status VARCHAR(30) NOT NULL DEFAULT 'layak' CHECK (status IN ('layak', 'perlu_perbaikan', 'afkir')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 5. TABEL inspections
-CREATE TABLE IF NOT EXISTS public.inspections (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    apar_id TEXT REFERENCES public.apars(id) ON DELETE CASCADE,
-    rig_id TEXT REFERENCES public.rigs(id) ON DELETE CASCADE,
-    inspector_name TEXT NOT NULL,
-    inspection_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    category TEXT NOT NULL DEFAULT 'bulanan' CHECK (category IN ('bulanan', 'tahunan')),
-    third_party_vendor TEXT,
-    checklist JSONB NOT NULL DEFAULT '{}'::jsonb,
-    overall_status TEXT NOT NULL DEFAULT 'layak' CHECK (overall_status IN ('layak', 'tidak_layak')),
-    notes TEXT,
-    inspection_photo TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+-- 2.5 TABEL INSPECTIONS (Log Inspeksi Fisik 7 Titik)
+CREATE TABLE inspections (
+  id VARCHAR(50) PRIMARY KEY,
+  apar_id VARCHAR(50) NOT NULL REFERENCES apars(id) ON DELETE CASCADE,
+  rig_id VARCHAR(20) NOT NULL REFERENCES rigs(id) ON DELETE CASCADE,
+  inspector_name VARCHAR(100) NOT NULL,
+  inspection_date DATE NOT NULL,
+  category VARCHAR(30) NOT NULL DEFAULT 'bulanan' CHECK (category IN ('bulanan', 'tahunan')),
+  third_party_vendor VARCHAR(100),
+  checklist JSONB NOT NULL, -- {handle, hose, nozzle, cylinderGuard, pinHandle, pressureGauge, cylinder}
+  overall_status VARCHAR(30) NOT NULL CHECK (overall_status IN ('layak', 'tidak_layak')),
+  notes TEXT,
+  inspection_photo TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Tambahkan kolom inspection_photo jika tabel sudah ada sebelumnya
-ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS inspection_photo TEXT;
-
--- 6. TABEL maintenances
-CREATE TABLE IF NOT EXISTS public.maintenances (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    apar_id TEXT REFERENCES public.apars(id) ON DELETE CASCADE,
-    rig_id TEXT REFERENCES public.rigs(id) ON DELETE CASCADE,
-    inspection_id TEXT REFERENCES public.inspections(id) ON DELETE SET NULL,
-    reported_by TEXT NOT NULL,
-    issue_description TEXT NOT NULL,
-    action_type TEXT NOT NULL DEFAULT 'perbaikan' CHECK (action_type IN ('perbaikan', 'pergantian', 'isi_ulang', 'hydrotest')),
-    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'pending_review', 'closed')),
-    vendor_name TEXT DEFAULT 'PT Sepakat HSE Solution',
-    finding_photo TEXT,
-    evidence_photo TEXT,
-    evidence_uploaded_by TEXT,
-    repair_notes TEXT,
-    admin_notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    resolved_at TIMESTAMPTZ
+-- 2.6 TABEL MAINTENANCES (Work Order Perbaikan)
+CREATE TABLE maintenances (
+  id VARCHAR(50) PRIMARY KEY,
+  apar_id VARCHAR(50) NOT NULL REFERENCES apars(id) ON DELETE CASCADE,
+  rig_id VARCHAR(20) NOT NULL REFERENCES rigs(id) ON DELETE CASCADE,
+  inspection_id VARCHAR(50) REFERENCES inspections(id) ON DELETE SET NULL,
+  reported_by VARCHAR(100) NOT NULL,
+  issue_description TEXT NOT NULL,
+  action_type VARCHAR(50) DEFAULT 'perbaikan',
+  status VARCHAR(30) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'pending_review', 'closed')),
+  vendor_name VARCHAR(100),
+  finding_photo TEXT,
+  evidence_photo TEXT,
+  evidence_uploaded_by VARCHAR(100),
+  repair_notes TEXT,
+  admin_notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  resolved_at TIMESTAMP WITH TIME ZONE
 );
 
--- Tambahkan kolom finding_photo jika tabel sudah ada sebelumnya
-ALTER TABLE public.maintenances ADD COLUMN IF NOT EXISTS finding_photo TEXT;
+-- INDEXES
+CREATE INDEX idx_apars_rig_id ON apars(rig_id);
+CREATE INDEX idx_apars_status ON apars(status);
+CREATE INDEX idx_inspections_apar_id ON inspections(apar_id);
+CREATE INDEX idx_inspections_rig_date ON inspections(rig_id, inspection_date);
+CREATE INDEX idx_maintenances_rig_status ON maintenances(rig_id, status);
 
--- ==============================================================================
--- KEBIJAKAN AKSES ROW LEVEL SECURITY (RLS) UNTUK ANON/PUBLIC KEY
--- ==============================================================================
-ALTER TABLE public.rigs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.apar_types ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.hfo_users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.apars ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inspections ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.maintenances ENABLE ROW LEVEL SECURITY;
+-- REALTIME REPLICATION (Realtime Broadcast ke Modul User & Admin)
+ALTER PUBLICATION supabase_realtime ADD TABLE apars;
+ALTER PUBLICATION supabase_realtime ADD TABLE maintenances;
+ALTER PUBLICATION supabase_realtime ADD TABLE inspections;
 
-DROP POLICY IF EXISTS "Public access rigs" ON public.rigs;
-CREATE POLICY "Public access rigs" ON public.rigs FOR ALL USING (true) WITH CHECK (true);
+-- ======================================================================================
+-- 3. INSERT INITIAL SEED DATA (224 APAR, 48 HFO + ADMIN, 16 RIG)
+-- ======================================================================================
 
-DROP POLICY IF EXISTS "Public access apar_types" ON public.apar_types;
-CREATE POLICY "Public access apar_types" ON public.apar_types FOR ALL USING (true) WITH CHECK (true);
+-- 3.1 RIGS (16 Rig BMS)
+INSERT INTO rigs (id, code, name, status) VALUES
+  ('BMS-02', 'BMS-02', 'Rig BMS-02', 'aktif'),
+  ('BMS-03', 'BMS-03', 'Rig BMS-03', 'aktif'),
+  ('BMS-03A', 'BMS-03A', 'Rig BMS-03A', 'aktif'),
+  ('BMS-05', 'BMS-05', 'Rig BMS-05', 'aktif'),
+  ('BMS-06', 'BMS-06', 'Rig BMS-06', 'aktif'),
+  ('BMS-07', 'BMS-07', 'Rig BMS-07', 'aktif'),
+  ('BMS-08', 'BMS-08', 'Rig BMS-08', 'aktif'),
+  ('BMS-10', 'BMS-10', 'Rig BMS-10', 'aktif'),
+  ('BMS-11', 'BMS-11', 'Rig BMS-11', 'aktif'),
+  ('BMS-15', 'BMS-15', 'Rig BMS-15', 'aktif'),
+  ('BMS-16', 'BMS-16', 'Rig BMS-16', 'aktif'),
+  ('BMS-17', 'BMS-17', 'Rig BMS-17', 'aktif'),
+  ('BMS-18', 'BMS-18', 'Rig BMS-18', 'aktif'),
+  ('BMS-19', 'BMS-19', 'Rig BMS-19', 'aktif'),
+  ('BMS-20', 'BMS-20', 'Rig BMS-20', 'aktif'),
+  ('BMS-21', 'BMS-21', 'Rig BMS-21', 'aktif');
 
-DROP POLICY IF EXISTS "Public access hfo_users" ON public.hfo_users;
-CREATE POLICY "Public access hfo_users" ON public.hfo_users FOR ALL USING (true) WITH CHECK (true);
+-- 3.2 APAR TYPES (7 Tipe Standar)
+INSERT INTO apar_types (id, media, capacity_label, has_pressure_gauge, hydrotest_years) VALUES
+  ('type_powder_9kg', 'Dry Chemical Powder', '9 Kg', TRUE, 5),
+  ('type_powder_3kg', 'Dry Chemical Powder', '3 Kg', TRUE, 5),
+  ('type_powder_6kg', 'Dry Chemical Powder', '6 Kg', TRUE, 5),
+  ('type_powder_75kg', 'Dry Chemical Powder', '75 Kg (150 Lbs)', TRUE, 5),
+  ('type_foam_100l', 'AFFF (Aqueous Film Forming Foam)', '100 Liter', TRUE, 5),
+  ('type_co2', 'Carbon Dioxide Gas (High Pressure)', '5 Kg - 150 Lbs', FALSE, 5),
+  ('type_clean_agent', 'Halon Replacement / Clean Agent Gas', '5 Kg', TRUE, 5);
 
-DROP POLICY IF EXISTS "Public access apars" ON public.apars;
-CREATE POLICY "Public access apars" ON public.apars FOR ALL USING (true) WITH CHECK (true);
+-- 3.3 HFO USERS (Akun Admin Pusat & 48 HFO BMS - Password: admin123 / 123456)
+INSERT INTO hfo_users (id, rig_id, name, position, role, password) VALUES
+  ('admin-01', NULL, 'Admin HSE Pusat', 'HSE Coordinator', 'admin', 'admin123'),
+  ('hfo-bms02-1', 'BMS-02', 'ANDI KURNIAWAN S', 'HFO', 'user', '123456'),
+  ('hfo-bms02-2', 'BMS-02', 'ROMANIK', 'HFO', 'user', '123456'),
+  ('hfo-bms02-3', 'BMS-02', 'M. AKBAR', 'HFO', 'user', '123456'),
+  ('hfo-bms03-1', 'BMS-03', 'INSANUL ARIF', 'HFO', 'user', '123456'),
+  ('hfo-bms03-2', 'BMS-03', 'RAHMAD S', 'HFO', 'user', '123456'),
+  ('hfo-bms03-3', 'BMS-03', 'RIKI HARIYONO', 'HFO', 'user', '123456'),
+  ('hfo-bms03a-1', 'BMS-03A', 'KOESTRIANDI', 'HFO', 'user', '123456'),
+  ('hfo-bms03a-2', 'BMS-03A', 'ROY SUHENDRA', 'HFO', 'user', '123456'),
+  ('hfo-bms03a-3', 'BMS-03A', 'HAVIZ SATRIA', 'HFO', 'user', '123456'),
+  ('hfo-bms05-1', 'BMS-05', 'HENDRA', 'HFO', 'user', '123456'),
+  ('hfo-bms05-2', 'BMS-05', 'TOTOK H', 'HFO', 'user', '123456'),
+  ('hfo-bms05-3', 'BMS-05', 'M. QODAFI', 'HFO', 'user', '123456'),
+  ('hfo-bms06-1', 'BMS-06', 'OKY KEVIN S', 'HFO', 'user', '123456'),
+  ('hfo-bms06-2', 'BMS-06', 'TOPAN MANORA', 'HFO', 'user', '123456'),
+  ('hfo-bms06-3', 'BMS-06', 'WAHID HAIKAL F', 'HFO', 'user', '123456'),
+  ('hfo-bms07-1', 'BMS-07', 'APRIADI S', 'HFO', 'user', '123456'),
+  ('hfo-bms07-2', 'BMS-07', 'M.FAKHRI W', 'HFO', 'user', '123456'),
+  ('hfo-bms07-3', 'BMS-07', 'SULAIMAN', 'HFO', 'user', '123456'),
+  ('hfo-bms08-1', 'BMS-08', 'M. ANJAR A', 'HFO', 'user', '123456'),
+  ('hfo-bms08-2', 'BMS-08', 'GEMARA FITRAH DIMAS', 'HFO', 'user', '123456'),
+  ('hfo-bms08-3', 'BMS-08', 'WISNU N', 'HFO', 'user', '123456'),
+  ('hfo-bms10-1', 'BMS-10', 'ARIF ILYAS', 'HFO', 'user', '123456'),
+  ('hfo-bms10-2', 'BMS-10', 'YUDI', 'HFO', 'user', '123456'),
+  ('hfo-bms10-3', 'BMS-10', 'FIRDAUS', 'HFO', 'user', '123456'),
+  ('hfo-bms11-1', 'BMS-11', 'ARDI F', 'HFO', 'user', '123456'),
+  ('hfo-bms11-2', 'BMS-11', 'NUGRAHA', 'HFO', 'user', '123456'),
+  ('hfo-bms11-3', 'BMS-11', 'ANTONY', 'HFO', 'user', '123456'),
+  ('hfo-bms15-1', 'BMS-15', 'RIKO ANDRIAN', 'HFO', 'user', '123456'),
+  ('hfo-bms15-2', 'BMS-15', 'RICARDO N', 'HFO', 'user', '123456'),
+  ('hfo-bms15-3', 'BMS-15', 'REVY EIDY', 'HFO', 'user', '123456'),
+  ('hfo-bms16-1', 'BMS-16', 'ANUGRAH BIMA', 'HFO', 'user', '123456'),
+  ('hfo-bms16-2', 'BMS-16', 'FAUZAN', 'HFO', 'user', '123456'),
+  ('hfo-bms16-3', 'BMS-16', 'FADLY', 'HFO', 'user', '123456'),
+  ('hfo-bms17-1', 'BMS-17', 'ANDRI NUGROHO', 'HFO', 'user', '123456'),
+  ('hfo-bms17-2', 'BMS-17', 'M. ARIF', 'HFO', 'user', '123456'),
+  ('hfo-bms17-3', 'BMS-17', 'M. ILHAM S', 'HFO', 'user', '123456'),
+  ('hfo-bms18-1', 'BMS-18', 'DONY HANDRI S', 'HFO', 'user', '123456'),
+  ('hfo-bms18-2', 'BMS-18', 'IMRON IMAM B', 'HFO', 'user', '123456'),
+  ('hfo-bms18-3', 'BMS-18', 'ANTONIUS T', 'HFO', 'user', '123456'),
+  ('hfo-bms19-1', 'BMS-19', 'QOMARUDIN', 'HFO', 'user', '123456'),
+  ('hfo-bms19-2', 'BMS-19', 'NOFRI', 'HFO', 'user', '123456'),
+  ('hfo-bms19-3', 'BMS-19', 'FAUZI', 'HFO', 'user', '123456'),
+  ('hfo-bms20-1', 'BMS-20', 'M. GALANG', 'HFO', 'user', '123456'),
+  ('hfo-bms20-2', 'BMS-20', 'HARTONO', 'HFO', 'user', '123456'),
+  ('hfo-bms20-3', 'BMS-20', 'NOFFRI MUKRIZ', 'HFO', 'user', '123456'),
+  ('hfo-bms21-1', 'BMS-21', 'IQBAL FIRNANDA', 'HFO', 'user', '123456'),
+  ('hfo-bms21-2', 'BMS-21', 'HAMDAN', 'HFO', 'user', '123456'),
+  ('hfo-bms21-3', 'BMS-21', 'KHAIRUL M', 'HFO', 'user', '123456');
 
-DROP POLICY IF EXISTS "Public access inspections" ON public.inspections;
-CREATE POLICY "Public access inspections" ON public.inspections FOR ALL USING (true) WITH CHECK (true);
+-- 3.4 APARS (224 Unit APAR di 16 Rig)
+INSERT INTO apars (id, asset_code, rig_id, apar_type_id, brand_model, serial_no, placement, charge_owner, manufacture_date, last_hydrotest_date, next_hydrotest_date, status) VALUES
+  ('apar-bms02-001', 'APAR-BMS02-001', 'BMS-02', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS02-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms02-002', 'APAR-BMS02-002', 'BMS-02', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS02-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms02-003', 'APAR-BMS02-003', 'BMS-02', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS02-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms02-004', 'APAR-BMS02-004', 'BMS-02', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS02-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms02-005', 'APAR-BMS02-005', 'BMS-02', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS02-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms02-006', 'APAR-BMS02-006', 'BMS-02', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS02-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms02-007', 'APAR-BMS02-007', 'BMS-02', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS02-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms02-008', 'APAR-BMS02-008', 'BMS-02', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS02-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms02-009', 'APAR-BMS02-009', 'BMS-02', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS02-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms02-010', 'APAR-BMS02-010', 'BMS-02', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS02-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms02-011', 'APAR-BMS02-011', 'BMS-02', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS02-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms02-012', 'APAR-BMS02-012', 'BMS-02', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS02-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms02-013', 'APAR-BMS02-013', 'BMS-02', 'type_powder_3kg', 'Standard ABC', 'SN-BMS02-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms02-014', 'APAR-BMS02-014', 'BMS-02', 'type_powder_3kg', 'Standard ABC', 'SN-BMS02-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms03-001', 'APAR-BMS03-001', 'BMS-03', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS03-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms03-002', 'APAR-BMS03-002', 'BMS-03', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS03-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms03-003', 'APAR-BMS03-003', 'BMS-03', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS03-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'perlu_perbaikan'),
+  ('apar-bms03-004', 'APAR-BMS03-004', 'BMS-03', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS03-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms03-005', 'APAR-BMS03-005', 'BMS-03', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS03-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms03-006', 'APAR-BMS03-006', 'BMS-03', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS03-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms03-007', 'APAR-BMS03-007', 'BMS-03', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS03-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms03-008', 'APAR-BMS03-008', 'BMS-03', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS03-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms03-009', 'APAR-BMS03-009', 'BMS-03', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS03-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms03-010', 'APAR-BMS03-010', 'BMS-03', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS03-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms03-011', 'APAR-BMS03-011', 'BMS-03', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS03-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms03-012', 'APAR-BMS03-012', 'BMS-03', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS03-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms03-013', 'APAR-BMS03-013', 'BMS-03', 'type_powder_3kg', 'Standard ABC', 'SN-BMS03-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms03-014', 'APAR-BMS03-014', 'BMS-03', 'type_powder_3kg', 'Standard ABC', 'SN-BMS03-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms03a-001', 'APAR-BMS03A-001', 'BMS-03A', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS03A-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms03a-002', 'APAR-BMS03A-002', 'BMS-03A', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS03A-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms03a-003', 'APAR-BMS03A-003', 'BMS-03A', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS03A-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms03a-004', 'APAR-BMS03A-004', 'BMS-03A', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS03A-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms03a-005', 'APAR-BMS03A-005', 'BMS-03A', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS03A-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms03a-006', 'APAR-BMS03A-006', 'BMS-03A', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS03A-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms03a-007', 'APAR-BMS03A-007', 'BMS-03A', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS03A-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms03a-008', 'APAR-BMS03A-008', 'BMS-03A', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS03A-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms03a-009', 'APAR-BMS03A-009', 'BMS-03A', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS03A-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms03a-010', 'APAR-BMS03A-010', 'BMS-03A', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS03A-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms03a-011', 'APAR-BMS03A-011', 'BMS-03A', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS03A-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms03a-012', 'APAR-BMS03A-012', 'BMS-03A', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS03A-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms03a-013', 'APAR-BMS03A-013', 'BMS-03A', 'type_powder_3kg', 'Standard ABC', 'SN-BMS03A-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms03a-014', 'APAR-BMS03A-014', 'BMS-03A', 'type_powder_3kg', 'Standard ABC', 'SN-BMS03A-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms05-001', 'APAR-BMS05-001', 'BMS-05', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS05-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'perlu_perbaikan'),
+  ('apar-bms05-002', 'APAR-BMS05-002', 'BMS-05', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS05-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms05-003', 'APAR-BMS05-003', 'BMS-05', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS05-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms05-004', 'APAR-BMS05-004', 'BMS-05', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS05-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms05-005', 'APAR-BMS05-005', 'BMS-05', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS05-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms05-006', 'APAR-BMS05-006', 'BMS-05', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS05-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms05-007', 'APAR-BMS05-007', 'BMS-05', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS05-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms05-008', 'APAR-BMS05-008', 'BMS-05', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS05-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms05-009', 'APAR-BMS05-009', 'BMS-05', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS05-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms05-010', 'APAR-BMS05-010', 'BMS-05', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS05-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms05-011', 'APAR-BMS05-011', 'BMS-05', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS05-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms05-012', 'APAR-BMS05-012', 'BMS-05', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS05-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms05-013', 'APAR-BMS05-013', 'BMS-05', 'type_powder_3kg', 'Standard ABC', 'SN-BMS05-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms05-014', 'APAR-BMS05-014', 'BMS-05', 'type_powder_3kg', 'Standard ABC', 'SN-BMS05-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms06-001', 'APAR-BMS06-001', 'BMS-06', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS06-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms06-002', 'APAR-BMS06-002', 'BMS-06', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS06-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms06-003', 'APAR-BMS06-003', 'BMS-06', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS06-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms06-004', 'APAR-BMS06-004', 'BMS-06', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS06-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms06-005', 'APAR-BMS06-005', 'BMS-06', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS06-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms06-006', 'APAR-BMS06-006', 'BMS-06', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS06-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms06-007', 'APAR-BMS06-007', 'BMS-06', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS06-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms06-008', 'APAR-BMS06-008', 'BMS-06', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS06-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms06-009', 'APAR-BMS06-009', 'BMS-06', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS06-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms06-010', 'APAR-BMS06-010', 'BMS-06', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS06-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms06-011', 'APAR-BMS06-011', 'BMS-06', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS06-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms06-012', 'APAR-BMS06-012', 'BMS-06', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS06-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms06-013', 'APAR-BMS06-013', 'BMS-06', 'type_powder_3kg', 'Standard ABC', 'SN-BMS06-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms06-014', 'APAR-BMS06-014', 'BMS-06', 'type_powder_3kg', 'Standard ABC', 'SN-BMS06-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms07-001', 'APAR-BMS07-001', 'BMS-07', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS07-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms07-002', 'APAR-BMS07-002', 'BMS-07', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS07-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms07-003', 'APAR-BMS07-003', 'BMS-07', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS07-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms07-004', 'APAR-BMS07-004', 'BMS-07', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS07-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms07-005', 'APAR-BMS07-005', 'BMS-07', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS07-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms07-006', 'APAR-BMS07-006', 'BMS-07', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS07-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms07-007', 'APAR-BMS07-007', 'BMS-07', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS07-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms07-008', 'APAR-BMS07-008', 'BMS-07', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS07-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms07-009', 'APAR-BMS07-009', 'BMS-07', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS07-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms07-010', 'APAR-BMS07-010', 'BMS-07', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS07-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'perlu_perbaikan'),
+  ('apar-bms07-011', 'APAR-BMS07-011', 'BMS-07', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS07-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms07-012', 'APAR-BMS07-012', 'BMS-07', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS07-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms07-013', 'APAR-BMS07-013', 'BMS-07', 'type_powder_3kg', 'Standard ABC', 'SN-BMS07-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms07-014', 'APAR-BMS07-014', 'BMS-07', 'type_powder_3kg', 'Standard ABC', 'SN-BMS07-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms08-001', 'APAR-BMS08-001', 'BMS-08', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS08-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms08-002', 'APAR-BMS08-002', 'BMS-08', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS08-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms08-003', 'APAR-BMS08-003', 'BMS-08', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS08-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms08-004', 'APAR-BMS08-004', 'BMS-08', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS08-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms08-005', 'APAR-BMS08-005', 'BMS-08', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS08-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms08-006', 'APAR-BMS08-006', 'BMS-08', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS08-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms08-007', 'APAR-BMS08-007', 'BMS-08', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS08-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms08-008', 'APAR-BMS08-008', 'BMS-08', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS08-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms08-009', 'APAR-BMS08-009', 'BMS-08', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS08-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms08-010', 'APAR-BMS08-010', 'BMS-08', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS08-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms08-011', 'APAR-BMS08-011', 'BMS-08', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS08-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms08-012', 'APAR-BMS08-012', 'BMS-08', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS08-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms08-013', 'APAR-BMS08-013', 'BMS-08', 'type_powder_3kg', 'Standard ABC', 'SN-BMS08-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms08-014', 'APAR-BMS08-014', 'BMS-08', 'type_powder_3kg', 'Standard ABC', 'SN-BMS08-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms10-001', 'APAR-BMS10-001', 'BMS-10', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS10-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms10-002', 'APAR-BMS10-002', 'BMS-10', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS10-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms10-003', 'APAR-BMS10-003', 'BMS-10', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS10-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms10-004', 'APAR-BMS10-004', 'BMS-10', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS10-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms10-005', 'APAR-BMS10-005', 'BMS-10', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS10-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms10-006', 'APAR-BMS10-006', 'BMS-10', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS10-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms10-007', 'APAR-BMS10-007', 'BMS-10', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS10-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms10-008', 'APAR-BMS10-008', 'BMS-10', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS10-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms10-009', 'APAR-BMS10-009', 'BMS-10', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS10-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms10-010', 'APAR-BMS10-010', 'BMS-10', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS10-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms10-011', 'APAR-BMS10-011', 'BMS-10', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS10-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'perlu_perbaikan'),
+  ('apar-bms10-012', 'APAR-BMS10-012', 'BMS-10', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS10-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms10-013', 'APAR-BMS10-013', 'BMS-10', 'type_powder_3kg', 'Standard ABC', 'SN-BMS10-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms10-014', 'APAR-BMS10-014', 'BMS-10', 'type_powder_3kg', 'Standard ABC', 'SN-BMS10-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'perlu_perbaikan'),
+  ('apar-bms11-001', 'APAR-BMS11-001', 'BMS-11', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS11-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms11-002', 'APAR-BMS11-002', 'BMS-11', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS11-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms11-003', 'APAR-BMS11-003', 'BMS-11', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS11-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms11-004', 'APAR-BMS11-004', 'BMS-11', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS11-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms11-005', 'APAR-BMS11-005', 'BMS-11', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS11-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms11-006', 'APAR-BMS11-006', 'BMS-11', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS11-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms11-007', 'APAR-BMS11-007', 'BMS-11', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS11-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms11-008', 'APAR-BMS11-008', 'BMS-11', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS11-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms11-009', 'APAR-BMS11-009', 'BMS-11', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS11-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms11-010', 'APAR-BMS11-010', 'BMS-11', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS11-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms11-011', 'APAR-BMS11-011', 'BMS-11', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS11-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms11-012', 'APAR-BMS11-012', 'BMS-11', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS11-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms11-013', 'APAR-BMS11-013', 'BMS-11', 'type_powder_3kg', 'Standard ABC', 'SN-BMS11-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms11-014', 'APAR-BMS11-014', 'BMS-11', 'type_powder_3kg', 'Standard ABC', 'SN-BMS11-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms15-001', 'APAR-BMS15-001', 'BMS-15', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS15-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms15-002', 'APAR-BMS15-002', 'BMS-15', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS15-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms15-003', 'APAR-BMS15-003', 'BMS-15', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS15-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms15-004', 'APAR-BMS15-004', 'BMS-15', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS15-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms15-005', 'APAR-BMS15-005', 'BMS-15', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS15-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms15-006', 'APAR-BMS15-006', 'BMS-15', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS15-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms15-007', 'APAR-BMS15-007', 'BMS-15', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS15-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms15-008', 'APAR-BMS15-008', 'BMS-15', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS15-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms15-009', 'APAR-BMS15-009', 'BMS-15', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS15-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms15-010', 'APAR-BMS15-010', 'BMS-15', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS15-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms15-011', 'APAR-BMS15-011', 'BMS-15', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS15-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms15-012', 'APAR-BMS15-012', 'BMS-15', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS15-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms15-013', 'APAR-BMS15-013', 'BMS-15', 'type_powder_3kg', 'Standard ABC', 'SN-BMS15-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms15-014', 'APAR-BMS15-014', 'BMS-15', 'type_powder_3kg', 'Standard ABC', 'SN-BMS15-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms16-001', 'APAR-BMS16-001', 'BMS-16', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS16-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms16-002', 'APAR-BMS16-002', 'BMS-16', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS16-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms16-003', 'APAR-BMS16-003', 'BMS-16', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS16-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms16-004', 'APAR-BMS16-004', 'BMS-16', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS16-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'perlu_perbaikan'),
+  ('apar-bms16-005', 'APAR-BMS16-005', 'BMS-16', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS16-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms16-006', 'APAR-BMS16-006', 'BMS-16', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS16-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms16-007', 'APAR-BMS16-007', 'BMS-16', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS16-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms16-008', 'APAR-BMS16-008', 'BMS-16', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS16-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms16-009', 'APAR-BMS16-009', 'BMS-16', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS16-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms16-010', 'APAR-BMS16-010', 'BMS-16', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS16-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms16-011', 'APAR-BMS16-011', 'BMS-16', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS16-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms16-012', 'APAR-BMS16-012', 'BMS-16', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS16-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms16-013', 'APAR-BMS16-013', 'BMS-16', 'type_powder_3kg', 'Standard ABC', 'SN-BMS16-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms16-014', 'APAR-BMS16-014', 'BMS-16', 'type_powder_3kg', 'Standard ABC', 'SN-BMS16-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms17-001', 'APAR-BMS17-001', 'BMS-17', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS17-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms17-002', 'APAR-BMS17-002', 'BMS-17', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS17-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms17-003', 'APAR-BMS17-003', 'BMS-17', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS17-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms17-004', 'APAR-BMS17-004', 'BMS-17', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS17-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms17-005', 'APAR-BMS17-005', 'BMS-17', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS17-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms17-006', 'APAR-BMS17-006', 'BMS-17', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS17-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms17-007', 'APAR-BMS17-007', 'BMS-17', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS17-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms17-008', 'APAR-BMS17-008', 'BMS-17', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS17-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms17-009', 'APAR-BMS17-009', 'BMS-17', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS17-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms17-010', 'APAR-BMS17-010', 'BMS-17', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS17-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms17-011', 'APAR-BMS17-011', 'BMS-17', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS17-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms17-012', 'APAR-BMS17-012', 'BMS-17', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS17-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms17-013', 'APAR-BMS17-013', 'BMS-17', 'type_powder_3kg', 'Standard ABC', 'SN-BMS17-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms17-014', 'APAR-BMS17-014', 'BMS-17', 'type_powder_3kg', 'Standard ABC', 'SN-BMS17-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms18-001', 'APAR-BMS18-001', 'BMS-18', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS18-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms18-002', 'APAR-BMS18-002', 'BMS-18', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS18-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'perlu_perbaikan'),
+  ('apar-bms18-003', 'APAR-BMS18-003', 'BMS-18', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS18-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms18-004', 'APAR-BMS18-004', 'BMS-18', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS18-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms18-005', 'APAR-BMS18-005', 'BMS-18', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS18-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms18-006', 'APAR-BMS18-006', 'BMS-18', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS18-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms18-007', 'APAR-BMS18-007', 'BMS-18', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS18-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms18-008', 'APAR-BMS18-008', 'BMS-18', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS18-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms18-009', 'APAR-BMS18-009', 'BMS-18', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS18-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms18-010', 'APAR-BMS18-010', 'BMS-18', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS18-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms18-011', 'APAR-BMS18-011', 'BMS-18', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS18-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms18-012', 'APAR-BMS18-012', 'BMS-18', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS18-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms18-013', 'APAR-BMS18-013', 'BMS-18', 'type_powder_3kg', 'Standard ABC', 'SN-BMS18-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms18-014', 'APAR-BMS18-014', 'BMS-18', 'type_powder_3kg', 'Standard ABC', 'SN-BMS18-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms19-001', 'APAR-BMS19-001', 'BMS-19', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS19-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms19-002', 'APAR-BMS19-002', 'BMS-19', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS19-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms19-003', 'APAR-BMS19-003', 'BMS-19', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS19-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms19-004', 'APAR-BMS19-004', 'BMS-19', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS19-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms19-005', 'APAR-BMS19-005', 'BMS-19', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS19-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms19-006', 'APAR-BMS19-006', 'BMS-19', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS19-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms19-007', 'APAR-BMS19-007', 'BMS-19', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS19-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms19-008', 'APAR-BMS19-008', 'BMS-19', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS19-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms19-009', 'APAR-BMS19-009', 'BMS-19', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS19-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms19-010', 'APAR-BMS19-010', 'BMS-19', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS19-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms19-011', 'APAR-BMS19-011', 'BMS-19', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS19-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms19-012', 'APAR-BMS19-012', 'BMS-19', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS19-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms19-013', 'APAR-BMS19-013', 'BMS-19', 'type_powder_3kg', 'Standard ABC', 'SN-BMS19-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms19-014', 'APAR-BMS19-014', 'BMS-19', 'type_powder_3kg', 'Standard ABC', 'SN-BMS19-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms20-001', 'APAR-BMS20-001', 'BMS-20', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS20-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms20-002', 'APAR-BMS20-002', 'BMS-20', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS20-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms20-003', 'APAR-BMS20-003', 'BMS-20', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS20-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms20-004', 'APAR-BMS20-004', 'BMS-20', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS20-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms20-005', 'APAR-BMS20-005', 'BMS-20', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS20-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms20-006', 'APAR-BMS20-006', 'BMS-20', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS20-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'perlu_perbaikan'),
+  ('apar-bms20-007', 'APAR-BMS20-007', 'BMS-20', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS20-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms20-008', 'APAR-BMS20-008', 'BMS-20', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS20-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms20-009', 'APAR-BMS20-009', 'BMS-20', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS20-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms20-010', 'APAR-BMS20-010', 'BMS-20', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS20-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms20-011', 'APAR-BMS20-011', 'BMS-20', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS20-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms20-012', 'APAR-BMS20-012', 'BMS-20', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS20-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms20-013', 'APAR-BMS20-013', 'BMS-20', 'type_powder_3kg', 'Standard ABC', 'SN-BMS20-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms20-014', 'APAR-BMS20-014', 'BMS-20', 'type_powder_3kg', 'Standard ABC', 'SN-BMS20-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak'),
+  ('apar-bms21-001', 'APAR-BMS21-001', 'BMS-21', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS21-1000', 'Rig Carrier', 'BMS', '2024-08-10', '2024-08-10', '2029-08-10', 'layak'),
+  ('apar-bms21-002', 'APAR-BMS21-002', 'BMS-21', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS21-1007', 'Tangki 1', 'BMS', '2023-09-01', '2023-09-01', '2028-09-01', 'layak'),
+  ('apar-bms21-003', 'APAR-BMS21-003', 'BMS-21', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS21-1014', 'Mud Pump', 'BMS', '2024-02-15', '2024-02-15', '2029-02-15', 'layak'),
+  ('apar-bms21-004', 'APAR-BMS21-004', 'BMS-21', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS21-1021', 'Genset', 'BMS', '2024-11-20', '2024-11-20', '2029-11-20', 'layak'),
+  ('apar-bms21-005', 'APAR-BMS21-005', 'BMS-21', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS21-1028', 'Accumulator', 'BMS', '2023-05-12', '2023-05-12', '2028-05-12', 'layak'),
+  ('apar-bms21-006', 'APAR-BMS21-006', 'BMS-21', 'type_powder_75kg', 'Tonata 75 KG', 'SN-BMS21-1035', 'Fire Box 1', 'BMS', '2021-12-10', '2021-12-10', '2026-12-10', 'layak'),
+  ('apar-bms21-007', 'APAR-BMS21-007', 'BMS-21', 'type_foam_100l', 'Firex (FF-1000)', 'SN-BMS21-1042', 'Fire Box 2', 'BMS', '2022-01-05', '2022-01-05', '2027-01-05', 'layak'),
+  ('apar-bms21-008', 'APAR-BMS21-008', 'BMS-21', 'type_clean_agent', 'Viking Clean Agent', 'SN-BMS21-1049', 'Rig Office', 'BMS', '2019-06-01', '2019-06-01', '2024-06-01', 'layak'),
+  ('apar-bms21-009', 'APAR-BMS21-009', 'BMS-21', 'type_co2', 'Alfrex (AFCO-150)', 'SN-BMS21-1056', 'Fuel Tank', 'BMS', '2020-04-10', '2020-04-10', '2025-04-10', 'layak'),
+  ('apar-bms21-010', 'APAR-BMS21-010', 'BMS-21', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS21-1063', 'Vacum Truck', 'APM', NULL, NULL, NULL, 'layak'),
+  ('apar-bms21-011', 'APAR-BMS21-011', 'BMS-21', 'type_powder_9kg', 'Champion (CMP)', 'SN-BMS21-1070', 'Tandam Truck', 'APM', '2023-11-01', '2023-11-01', '2028-11-01', 'layak'),
+  ('apar-bms21-012', 'APAR-BMS21-012', 'BMS-21', 'type_powder_9kg', 'Firex (FX-90)', 'SN-BMS21-1077', 'Foco TMC', 'BMS', '2024-05-18', '2024-05-18', '2029-05-18', 'layak'),
+  ('apar-bms21-013', 'APAR-BMS21-013', 'BMS-21', 'type_powder_3kg', 'Standard ABC', 'SN-BMS21-1084', 'Bus Crew', 'BMS', '2022-08-20', '2022-08-20', '2027-08-20', 'layak'),
+  ('apar-bms21-014', 'APAR-BMS21-014', 'BMS-21', 'type_powder_3kg', 'Standard ABC', 'SN-BMS21-1091', 'LV Rig', 'BMS', '2023-03-14', '2023-03-14', '2028-03-14', 'layak');
 
-DROP POLICY IF EXISTS "Public access maintenances" ON public.maintenances;
-CREATE POLICY "Public access maintenances" ON public.maintenances FOR ALL USING (true) WITH CHECK (true);
+-- 3.5 INSPECTIONS (224 Log Inspeksi)
+INSERT INTO inspections (id, apar_id, rig_id, inspector_name, inspection_date, category, third_party_vendor, checklist, overall_status, notes) VALUES
+  ('insp-bms02-001-curr', 'apar-bms02-001', 'BMS-02', 'ANDI KURNIAWAN S', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-002-curr', 'apar-bms02-002', 'BMS-02', 'ROMANIK', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-003-curr', 'apar-bms02-003', 'BMS-02', 'M. AKBAR', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-004-curr', 'apar-bms02-004', 'BMS-02', 'ANDI KURNIAWAN S', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-005-curr', 'apar-bms02-005', 'BMS-02', 'ROMANIK', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-006-curr', 'apar-bms02-006', 'BMS-02', 'M. AKBAR', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-007-curr', 'apar-bms02-007', 'BMS-02', 'ANDI KURNIAWAN S', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-008-curr', 'apar-bms02-008', 'BMS-02', 'ROMANIK', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-009-curr', 'apar-bms02-009', 'BMS-02', 'M. AKBAR', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-010-curr', 'apar-bms02-010', 'BMS-02', 'ANDI KURNIAWAN S', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-011-prev', 'apar-bms02-011', 'BMS-02', 'M. AKBAR', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-012-prev', 'apar-bms02-012', 'BMS-02', 'ANDI KURNIAWAN S', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-013-prev', 'apar-bms02-013', 'BMS-02', 'ROMANIK', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms02-014-prev', 'apar-bms02-014', 'BMS-02', 'M. AKBAR', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-001-curr', 'apar-bms03-001', 'BMS-03', 'INSANUL ARIF', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-002-curr', 'apar-bms03-002', 'BMS-03', 'RAHMAD S', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-003-curr', 'apar-bms03-003', 'BMS-03', 'RIKI HARIYONO', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"rusak","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'tidak_layak', 'Nozzle tersumbat lumpur pengeboran mengering.'),
+  ('insp-bms03-004-curr', 'apar-bms03-004', 'BMS-03', 'INSANUL ARIF', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-005-curr', 'apar-bms03-005', 'BMS-03', 'RAHMAD S', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-006-curr', 'apar-bms03-006', 'BMS-03', 'RIKI HARIYONO', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-007-curr', 'apar-bms03-007', 'BMS-03', 'INSANUL ARIF', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-008-curr', 'apar-bms03-008', 'BMS-03', 'RAHMAD S', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-009-curr', 'apar-bms03-009', 'BMS-03', 'RIKI HARIYONO', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-010-curr', 'apar-bms03-010', 'BMS-03', 'INSANUL ARIF', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-011-prev', 'apar-bms03-011', 'BMS-03', 'RIKI HARIYONO', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-012-prev', 'apar-bms03-012', 'BMS-03', 'INSANUL ARIF', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-013-prev', 'apar-bms03-013', 'BMS-03', 'RAHMAD S', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03-014-prev', 'apar-bms03-014', 'BMS-03', 'RIKI HARIYONO', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-001-curr', 'apar-bms03a-001', 'BMS-03A', 'KOESTRIANDI', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-002-curr', 'apar-bms03a-002', 'BMS-03A', 'ROY SUHENDRA', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-003-curr', 'apar-bms03a-003', 'BMS-03A', 'HAVIZ SATRIA', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-004-curr', 'apar-bms03a-004', 'BMS-03A', 'KOESTRIANDI', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-005-curr', 'apar-bms03a-005', 'BMS-03A', 'ROY SUHENDRA', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-006-curr', 'apar-bms03a-006', 'BMS-03A', 'HAVIZ SATRIA', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-007-curr', 'apar-bms03a-007', 'BMS-03A', 'KOESTRIANDI', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-008-curr', 'apar-bms03a-008', 'BMS-03A', 'ROY SUHENDRA', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-009-curr', 'apar-bms03a-009', 'BMS-03A', 'HAVIZ SATRIA', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-010-curr', 'apar-bms03a-010', 'BMS-03A', 'KOESTRIANDI', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-011-prev', 'apar-bms03a-011', 'BMS-03A', 'HAVIZ SATRIA', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-012-prev', 'apar-bms03a-012', 'BMS-03A', 'KOESTRIANDI', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-013-prev', 'apar-bms03a-013', 'BMS-03A', 'ROY SUHENDRA', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms03a-014-prev', 'apar-bms03a-014', 'BMS-03A', 'HAVIZ SATRIA', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-001-curr', 'apar-bms05-001', 'BMS-05', 'HENDRA', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"rusak","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'tidak_layak', 'Sabuk klem pengaman dinding rig retak dan longgar.'),
+  ('insp-bms05-002-curr', 'apar-bms05-002', 'BMS-05', 'TOTOK H', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-003-curr', 'apar-bms05-003', 'BMS-05', 'M. QODAFI', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-004-curr', 'apar-bms05-004', 'BMS-05', 'HENDRA', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-005-curr', 'apar-bms05-005', 'BMS-05', 'TOTOK H', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-006-curr', 'apar-bms05-006', 'BMS-05', 'M. QODAFI', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-007-curr', 'apar-bms05-007', 'BMS-05', 'HENDRA', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-008-curr', 'apar-bms05-008', 'BMS-05', 'TOTOK H', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-009-curr', 'apar-bms05-009', 'BMS-05', 'M. QODAFI', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-010-curr', 'apar-bms05-010', 'BMS-05', 'HENDRA', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-011-prev', 'apar-bms05-011', 'BMS-05', 'M. QODAFI', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-012-prev', 'apar-bms05-012', 'BMS-05', 'HENDRA', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-013-prev', 'apar-bms05-013', 'BMS-05', 'TOTOK H', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms05-014-prev', 'apar-bms05-014', 'BMS-05', 'M. QODAFI', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-001-curr', 'apar-bms06-001', 'BMS-06', 'OKY KEVIN S', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-002-curr', 'apar-bms06-002', 'BMS-06', 'TOPAN MANORA', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-003-curr', 'apar-bms06-003', 'BMS-06', 'WAHID HAIKAL F', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-004-curr', 'apar-bms06-004', 'BMS-06', 'OKY KEVIN S', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-005-curr', 'apar-bms06-005', 'BMS-06', 'TOPAN MANORA', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-006-curr', 'apar-bms06-006', 'BMS-06', 'WAHID HAIKAL F', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-007-curr', 'apar-bms06-007', 'BMS-06', 'OKY KEVIN S', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-008-curr', 'apar-bms06-008', 'BMS-06', 'TOPAN MANORA', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-009-curr', 'apar-bms06-009', 'BMS-06', 'WAHID HAIKAL F', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-010-curr', 'apar-bms06-010', 'BMS-06', 'OKY KEVIN S', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-011-prev', 'apar-bms06-011', 'BMS-06', 'WAHID HAIKAL F', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-012-prev', 'apar-bms06-012', 'BMS-06', 'OKY KEVIN S', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-013-prev', 'apar-bms06-013', 'BMS-06', 'TOPAN MANORA', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms06-014-prev', 'apar-bms06-014', 'BMS-06', 'WAHID HAIKAL F', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-001-curr', 'apar-bms07-001', 'BMS-07', 'APRIADI S', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-002-curr', 'apar-bms07-002', 'BMS-07', 'M.FAKHRI W', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-003-curr', 'apar-bms07-003', 'BMS-07', 'SULAIMAN', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-004-curr', 'apar-bms07-004', 'BMS-07', 'APRIADI S', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-005-curr', 'apar-bms07-005', 'BMS-07', 'M.FAKHRI W', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-006-curr', 'apar-bms07-006', 'BMS-07', 'SULAIMAN', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-007-curr', 'apar-bms07-007', 'BMS-07', 'APRIADI S', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-008-curr', 'apar-bms07-008', 'BMS-07', 'M.FAKHRI W', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-009-curr', 'apar-bms07-009', 'BMS-07', 'SULAIMAN', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-010-curr', 'apar-bms07-010', 'BMS-07', 'APRIADI S', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"rusak","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'tidak_layak', 'Pin segel pengaman putus dan tuas handle macet.'),
+  ('insp-bms07-011-prev', 'apar-bms07-011', 'BMS-07', 'SULAIMAN', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-012-prev', 'apar-bms07-012', 'BMS-07', 'APRIADI S', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-013-prev', 'apar-bms07-013', 'BMS-07', 'M.FAKHRI W', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms07-014-prev', 'apar-bms07-014', 'BMS-07', 'SULAIMAN', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-001-curr', 'apar-bms08-001', 'BMS-08', 'M. ANJAR A', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-002-curr', 'apar-bms08-002', 'BMS-08', 'GEMARA FITRAH DIMAS', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-003-curr', 'apar-bms08-003', 'BMS-08', 'WISNU N', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-004-curr', 'apar-bms08-004', 'BMS-08', 'M. ANJAR A', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-005-curr', 'apar-bms08-005', 'BMS-08', 'GEMARA FITRAH DIMAS', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-006-curr', 'apar-bms08-006', 'BMS-08', 'WISNU N', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-007-curr', 'apar-bms08-007', 'BMS-08', 'M. ANJAR A', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-008-curr', 'apar-bms08-008', 'BMS-08', 'GEMARA FITRAH DIMAS', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-009-curr', 'apar-bms08-009', 'BMS-08', 'WISNU N', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-010-curr', 'apar-bms08-010', 'BMS-08', 'M. ANJAR A', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-011-prev', 'apar-bms08-011', 'BMS-08', 'WISNU N', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-012-prev', 'apar-bms08-012', 'BMS-08', 'M. ANJAR A', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-013-prev', 'apar-bms08-013', 'BMS-08', 'GEMARA FITRAH DIMAS', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms08-014-prev', 'apar-bms08-014', 'BMS-08', 'WISNU N', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-001-curr', 'apar-bms10-001', 'BMS-10', 'ARIF ILYAS', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-002-curr', 'apar-bms10-002', 'BMS-10', 'YUDI', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-003-curr', 'apar-bms10-003', 'BMS-10', 'FIRDAUS', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-004-curr', 'apar-bms10-004', 'BMS-10', 'ARIF ILYAS', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-005-curr', 'apar-bms10-005', 'BMS-10', 'YUDI', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-006-curr', 'apar-bms10-006', 'BMS-10', 'FIRDAUS', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-007-curr', 'apar-bms10-007', 'BMS-10', 'ARIF ILYAS', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-008-curr', 'apar-bms10-008', 'BMS-10', 'YUDI', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-009-curr', 'apar-bms10-009', 'BMS-10', 'FIRDAUS', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-010-curr', 'apar-bms10-010', 'BMS-10', 'ARIF ILYAS', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-011-prev', 'apar-bms10-011', 'BMS-10', 'FIRDAUS', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-012-prev', 'apar-bms10-012', 'BMS-10', 'ARIF ILYAS', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-013-prev', 'apar-bms10-013', 'BMS-10', 'YUDI', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms10-014-prev', 'apar-bms10-014', 'BMS-10', 'FIRDAUS', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-001-curr', 'apar-bms11-001', 'BMS-11', 'ARDI F', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-002-curr', 'apar-bms11-002', 'BMS-11', 'NUGRAHA', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-003-curr', 'apar-bms11-003', 'BMS-11', 'ANTONY', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-004-curr', 'apar-bms11-004', 'BMS-11', 'ARDI F', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-005-curr', 'apar-bms11-005', 'BMS-11', 'NUGRAHA', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-006-curr', 'apar-bms11-006', 'BMS-11', 'ANTONY', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-007-curr', 'apar-bms11-007', 'BMS-11', 'ARDI F', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-008-curr', 'apar-bms11-008', 'BMS-11', 'NUGRAHA', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-009-curr', 'apar-bms11-009', 'BMS-11', 'ANTONY', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-010-curr', 'apar-bms11-010', 'BMS-11', 'ARDI F', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-011-prev', 'apar-bms11-011', 'BMS-11', 'ANTONY', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-012-prev', 'apar-bms11-012', 'BMS-11', 'ARDI F', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-013-prev', 'apar-bms11-013', 'BMS-11', 'NUGRAHA', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms11-014-prev', 'apar-bms11-014', 'BMS-11', 'ANTONY', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-001-curr', 'apar-bms15-001', 'BMS-15', 'RIKO ANDRIAN', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-002-curr', 'apar-bms15-002', 'BMS-15', 'RICARDO N', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-003-curr', 'apar-bms15-003', 'BMS-15', 'REVY EIDY', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-004-curr', 'apar-bms15-004', 'BMS-15', 'RIKO ANDRIAN', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-005-curr', 'apar-bms15-005', 'BMS-15', 'RICARDO N', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-006-curr', 'apar-bms15-006', 'BMS-15', 'REVY EIDY', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-007-curr', 'apar-bms15-007', 'BMS-15', 'RIKO ANDRIAN', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-008-curr', 'apar-bms15-008', 'BMS-15', 'RICARDO N', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-009-curr', 'apar-bms15-009', 'BMS-15', 'REVY EIDY', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-010-curr', 'apar-bms15-010', 'BMS-15', 'RIKO ANDRIAN', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-011-prev', 'apar-bms15-011', 'BMS-15', 'REVY EIDY', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-012-prev', 'apar-bms15-012', 'BMS-15', 'RIKO ANDRIAN', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-013-prev', 'apar-bms15-013', 'BMS-15', 'RICARDO N', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms15-014-prev', 'apar-bms15-014', 'BMS-15', 'REVY EIDY', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-001-curr', 'apar-bms16-001', 'BMS-16', 'ANUGRAH BIMA', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-002-curr', 'apar-bms16-002', 'BMS-16', 'FAUZAN', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-003-curr', 'apar-bms16-003', 'BMS-16', 'FADLY', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-004-curr', 'apar-bms16-004', 'BMS-16', 'ANUGRAH BIMA', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"rusak","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'tidak_layak', 'Hose bocor saat inspeksi fisik tabung CO2.'),
+  ('insp-bms16-005-curr', 'apar-bms16-005', 'BMS-16', 'FAUZAN', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-006-curr', 'apar-bms16-006', 'BMS-16', 'FADLY', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-007-curr', 'apar-bms16-007', 'BMS-16', 'ANUGRAH BIMA', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-008-curr', 'apar-bms16-008', 'BMS-16', 'FAUZAN', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-009-curr', 'apar-bms16-009', 'BMS-16', 'FADLY', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-010-curr', 'apar-bms16-010', 'BMS-16', 'ANUGRAH BIMA', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-011-prev', 'apar-bms16-011', 'BMS-16', 'FADLY', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-012-prev', 'apar-bms16-012', 'BMS-16', 'ANUGRAH BIMA', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-013-prev', 'apar-bms16-013', 'BMS-16', 'FAUZAN', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms16-014-prev', 'apar-bms16-014', 'BMS-16', 'FADLY', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-001-curr', 'apar-bms17-001', 'BMS-17', 'ANDRI NUGROHO', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-002-curr', 'apar-bms17-002', 'BMS-17', 'M. ARIF', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-003-curr', 'apar-bms17-003', 'BMS-17', 'M. ILHAM S', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-004-curr', 'apar-bms17-004', 'BMS-17', 'ANDRI NUGROHO', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-005-curr', 'apar-bms17-005', 'BMS-17', 'M. ARIF', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-006-curr', 'apar-bms17-006', 'BMS-17', 'M. ILHAM S', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-007-curr', 'apar-bms17-007', 'BMS-17', 'ANDRI NUGROHO', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-008-curr', 'apar-bms17-008', 'BMS-17', 'M. ARIF', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-009-curr', 'apar-bms17-009', 'BMS-17', 'M. ILHAM S', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-010-curr', 'apar-bms17-010', 'BMS-17', 'ANDRI NUGROHO', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-011-prev', 'apar-bms17-011', 'BMS-17', 'M. ILHAM S', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-012-prev', 'apar-bms17-012', 'BMS-17', 'ANDRI NUGROHO', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-013-prev', 'apar-bms17-013', 'BMS-17', 'M. ARIF', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms17-014-prev', 'apar-bms17-014', 'BMS-17', 'M. ILHAM S', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-001-curr', 'apar-bms18-001', 'BMS-18', 'DONY HANDRI S', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-002-curr', 'apar-bms18-002', 'BMS-18', 'IMRON IMAM B', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"rusak"}'::jsonb, 'tidak_layak', 'Bodi tabung korosi parah dan penyok di dekat dasar tabung.'),
+  ('insp-bms18-003-curr', 'apar-bms18-003', 'BMS-18', 'ANTONIUS T', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-004-curr', 'apar-bms18-004', 'BMS-18', 'DONY HANDRI S', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-005-curr', 'apar-bms18-005', 'BMS-18', 'IMRON IMAM B', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-006-curr', 'apar-bms18-006', 'BMS-18', 'ANTONIUS T', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-007-curr', 'apar-bms18-007', 'BMS-18', 'DONY HANDRI S', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-008-curr', 'apar-bms18-008', 'BMS-18', 'IMRON IMAM B', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-009-curr', 'apar-bms18-009', 'BMS-18', 'ANTONIUS T', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-010-curr', 'apar-bms18-010', 'BMS-18', 'DONY HANDRI S', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-011-prev', 'apar-bms18-011', 'BMS-18', 'ANTONIUS T', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-012-prev', 'apar-bms18-012', 'BMS-18', 'DONY HANDRI S', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-013-prev', 'apar-bms18-013', 'BMS-18', 'IMRON IMAM B', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms18-014-prev', 'apar-bms18-014', 'BMS-18', 'ANTONIUS T', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-001-curr', 'apar-bms19-001', 'BMS-19', 'QOMARUDIN', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-002-curr', 'apar-bms19-002', 'BMS-19', 'NOFRI', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-003-curr', 'apar-bms19-003', 'BMS-19', 'FAUZI', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-004-curr', 'apar-bms19-004', 'BMS-19', 'QOMARUDIN', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-005-curr', 'apar-bms19-005', 'BMS-19', 'NOFRI', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-006-curr', 'apar-bms19-006', 'BMS-19', 'FAUZI', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-007-curr', 'apar-bms19-007', 'BMS-19', 'QOMARUDIN', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-008-curr', 'apar-bms19-008', 'BMS-19', 'NOFRI', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-009-curr', 'apar-bms19-009', 'BMS-19', 'FAUZI', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-010-curr', 'apar-bms19-010', 'BMS-19', 'QOMARUDIN', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-011-prev', 'apar-bms19-011', 'BMS-19', 'FAUZI', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-012-prev', 'apar-bms19-012', 'BMS-19', 'QOMARUDIN', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-013-prev', 'apar-bms19-013', 'BMS-19', 'NOFRI', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms19-014-prev', 'apar-bms19-014', 'BMS-19', 'FAUZI', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-001-curr', 'apar-bms20-001', 'BMS-20', 'M. GALANG', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-002-curr', 'apar-bms20-002', 'BMS-20', 'HARTONO', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-003-curr', 'apar-bms20-003', 'BMS-20', 'NOFFRI MUKRIZ', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-004-curr', 'apar-bms20-004', 'BMS-20', 'M. GALANG', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-005-curr', 'apar-bms20-005', 'BMS-20', 'HARTONO', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-006-curr', 'apar-bms20-006', 'BMS-20', 'NOFFRI MUKRIZ', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"rusak"}'::jsonb, 'tidak_layak', 'Tabung terkena benturan sling saat mobilitas rig.'),
+  ('insp-bms20-007-curr', 'apar-bms20-007', 'BMS-20', 'M. GALANG', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-008-curr', 'apar-bms20-008', 'BMS-20', 'HARTONO', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-009-curr', 'apar-bms20-009', 'BMS-20', 'NOFFRI MUKRIZ', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-010-curr', 'apar-bms20-010', 'BMS-20', 'M. GALANG', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-011-prev', 'apar-bms20-011', 'BMS-20', 'NOFFRI MUKRIZ', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-012-prev', 'apar-bms20-012', 'BMS-20', 'M. GALANG', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-013-prev', 'apar-bms20-013', 'BMS-20', 'HARTONO', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms20-014-prev', 'apar-bms20-014', 'BMS-20', 'NOFFRI MUKRIZ', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-001-curr', 'apar-bms21-001', 'BMS-21', 'IQBAL FIRNANDA', '2026-11-01', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-002-curr', 'apar-bms21-002', 'BMS-21', 'HAMDAN', '2026-11-03', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-003-curr', 'apar-bms21-003', 'BMS-21', 'KHAIRUL M', '2026-11-05', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-004-curr', 'apar-bms21-004', 'BMS-21', 'IQBAL FIRNANDA', '2026-11-07', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-005-curr', 'apar-bms21-005', 'BMS-21', 'HAMDAN', '2026-11-09', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-006-curr', 'apar-bms21-006', 'BMS-21', 'KHAIRUL M', '2026-11-11', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-007-curr', 'apar-bms21-007', 'BMS-21', 'IQBAL FIRNANDA', '2026-11-13', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-008-curr', 'apar-bms21-008', 'BMS-21', 'HAMDAN', '2026-11-15', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-009-curr', 'apar-bms21-009', 'BMS-21', 'KHAIRUL M', '2026-11-17', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"na","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-010-curr', 'apar-bms21-010', 'BMS-21', 'IQBAL FIRNANDA', '2026-11-19', 'tahunan', 'Sepakat', '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-011-prev', 'apar-bms21-011', 'BMS-21', 'KHAIRUL M', '2026-10-21', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-012-prev', 'apar-bms21-012', 'BMS-21', 'IQBAL FIRNANDA', '2026-10-23', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-013-prev', 'apar-bms21-013', 'BMS-21', 'HAMDAN', '2026-10-25', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL),
+  ('insp-bms21-014-prev', 'apar-bms21-014', 'BMS-21', 'KHAIRUL M', '2026-10-02', 'bulanan', NULL, '{"handle":"bagus","hose":"bagus","nozzle":"bagus","cylinderGuard":"bagus","pinHandle":"bagus","pressureGauge":"bagus","cylinder":"bagus"}'::jsonb, 'layak', NULL);
 
--- ==============================================================================
--- AKTIFKAN SUPABASE REALTIME REPLICATION
--- ==============================================================================
-DO $$
+-- 3.6 MAINTENANCES (8 Tiket Work Order Kerusakan)
+INSERT INTO maintenances (id, apar_id, rig_id, inspection_id, reported_by, issue_description, action_type, status, vendor_name, evidence_photo, evidence_uploaded_by, repair_notes, admin_notes, created_at, resolved_at) VALUES
+  ('mnt-bms03-003', 'apar-bms03-003', 'BMS-03', NULL, 'RIKI HARIYONO', 'Nozzle tersumbat lumpur pengeboran mengering.', 'perbaikan', 'open', NULL, NULL, NULL, NULL, NULL, '2026-11-05T08:00:00Z', NULL),
+  ('mnt-bms05-001', 'apar-bms05-001', 'BMS-05', NULL, 'HENDRA', 'Sabuk klem pengaman dinding rig retak dan longgar.', 'perbaikan', 'in_progress', NULL, NULL, NULL, NULL, NULL, '2026-11-01T08:00:00Z', NULL),
+  ('mnt-bms07-010', 'apar-bms07-010', 'BMS-07', NULL, 'APRIADI S', 'Pin segel pengaman putus dan tuas handle macet.', 'perbaikan', 'pending_review', NULL, NULL, 'SULAIMAN', 'Telah diganti suku cadang baru oleh kru', NULL, '2026-11-19T08:00:00Z', NULL),
+  ('mnt-bms10-011', 'apar-bms10-011', 'BMS-10', NULL, 'YUDI', 'Hose retak getas dan nozzle tersumbat.', 'perbaikan', 'open', NULL, NULL, NULL, NULL, NULL, '2026-10-21T08:00:00Z', NULL),
+  ('mnt-bms10-014', 'apar-bms10-014', 'BMS-10', NULL, 'YUDI', 'Jarum pressure gauge di zona merah (tekanan drop / low pressure).', 'perbaikan', 'in_progress', NULL, NULL, NULL, NULL, NULL, '2026-10-02T08:00:00Z', NULL),
+  ('mnt-bms16-004', 'apar-bms16-004', 'BMS-16', NULL, 'ANUGRAH BIMA', 'Hose bocor saat inspeksi fisik tabung CO2.', 'perbaikan', 'pending_review', NULL, NULL, 'FADLY', 'Telah diganti suku cadang baru oleh kru', NULL, '2026-11-07T08:00:00Z', NULL),
+  ('mnt-bms18-002', 'apar-bms18-002', 'BMS-18', NULL, 'IMRON IMAM B', 'Bodi tabung korosi parah dan penyok di dekat dasar tabung.', 'perbaikan', 'open', NULL, NULL, NULL, NULL, NULL, '2026-11-03T08:00:00Z', NULL),
+  ('mnt-bms20-006', 'apar-bms20-006', 'BMS-20', NULL, 'NOFFRI MUKRIZ', 'Tabung terkena benturan sling saat mobilitas rig.', 'perbaikan', 'in_progress', NULL, NULL, NULL, NULL, NULL, '2026-11-11T08:00:00Z', NULL);
+
+-- ======================================================================================
+-- 4. FUNCTION & TRIGGER: SINKRONISASI OTOMATIS STATUS APAR (ADMIN ⇄ USER)
+-- Saat tiket perbaikan diubah statusnya menjadi 'closed' oleh Admin, status APAR otomatis pulih jadi 'layak'
+-- ======================================================================================
+CREATE OR REPLACE FUNCTION trg_fn_sync_apar_on_maintenance_close()
+RETURNS TRIGGER AS $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_publication_tables 
-    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'apars'
-  ) THEN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.apars;
+  IF NEW.status = 'closed' AND OLD.status != 'closed' THEN
+    UPDATE apars
+    SET status = 'layak'
+    WHERE id = NEW.apar_id;
+  ELSIF NEW.status IN ('open', 'in_progress', 'pending_review') THEN
+    UPDATE apars
+    SET status = 'perlu_perbaikan'
+    WHERE id = NEW.apar_id;
   END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_publication_tables 
-    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'inspections'
-  ) THEN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.inspections;
-  END IF;
+DROP TRIGGER IF EXISTS trg_sync_apar_on_maintenance ON maintenances;
+CREATE TRIGGER trg_sync_apar_on_maintenance
+AFTER UPDATE OF status ON maintenances
+FOR EACH ROW
+EXECUTE FUNCTION trg_fn_sync_apar_on_maintenance_close();
 
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_publication_tables 
-    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'maintenances'
-  ) THEN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.maintenances;
-  END IF;
-END $$;
+-- ======================================================================================
+-- 5. ROW LEVEL SECURITY (RLS) - AKSES PENUH CLIENT USER & ADMIN
+-- ======================================================================================
+ALTER TABLE inspections ADD COLUMN IF NOT EXISTS inspection_photo TEXT;
+ALTER TABLE maintenances ADD COLUMN IF NOT EXISTS finding_photo TEXT;
 
--- ==============================================================================
--- SEED DATA AWAL MASTER
--- ==============================================================================
-
--- Seed rigs (18 Rig Operasional BMS)
-INSERT INTO public.rigs (id, code, name, status) VALUES
-('rig-bms-01', 'BMS-01', 'Rig BMS-01', 'aktif'),
-('rig-bms-02', 'BMS-02', 'Rig BMS-02', 'aktif'),
-('rig-bms-03', 'BMS-03', 'Rig BMS-03', 'aktif'),
-('rig-bms-3a',  'BMS-3A', 'Rig BMS-3A', 'aktif'),
-('rig-bms-05', 'BMS-05', 'Rig BMS-05', 'aktif'),
-('rig-bms-06', 'BMS-06', 'Rig BMS-06', 'aktif'),
-('rig-bms-07', 'BMS-07', 'Rig BMS-07', 'aktif'),
-('rig-bms-08', 'BMS-08', 'Rig BMS-08', 'aktif'),
-('rig-bms-09', 'BMS-09', 'Rig BMS-09', 'aktif'),
-('rig-bms-10', 'BMS-10', 'Rig BMS-10', 'aktif'),
-('rig-bms-11', 'BMS-11', 'Rig BMS-11', 'aktif'),
-('rig-bms-15', 'BMS-15', 'Rig BMS-15', 'aktif'),
-('rig-bms-16', 'BMS-16', 'Rig BMS-16', 'aktif'),
-('rig-bms-17', 'BMS-17', 'Rig BMS-17', 'aktif'),
-('rig-bms-18', 'BMS-18', 'Rig BMS-18', 'aktif'),
-('rig-bms-19', 'BMS-19', 'Rig BMS-19', 'aktif'),
-('rig-bms-20', 'BMS-20', 'Rig BMS-20', 'aktif'),
-('rig-bms-21', 'BMS-21', 'Rig BMS-21', 'aktif')
-ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, status = EXCLUDED.status;
-
--- Seed apar_types (7 Master Tipe K3)
-INSERT INTO public.apar_types (id, media, capacity_label, has_pressure_gauge, hydrotest_years) VALUES
-('dry_powder_9kg', 'Dry Chemical Powder ABC', '9 Kg', true, 5),
-('dry_powder_6kg', 'Dry Chemical Powder ABC', '6 Kg', true, 5),
-('dry_powder_4kg', 'Dry Chemical Powder ABC', '4 Kg', true, 5),
-('dry_powder_3kg', 'Dry Chemical Powder ABC', '3 Kg', true, 5),
-('co2_cylinder', 'Carbon Dioxide (CO2)', '15 Lbs (6.8 Kg)', false, 5),
-('foam_trolley_100l', 'AFFF Foam', '100 Liter', true, 5),
-('powder_trolley_150lbs', 'Dry Chemical Powder ABC', '150 Lbs (75 Kg)', true, 5)
-ON CONFLICT (id) DO UPDATE SET media = EXCLUDED.media, capacity_label = EXCLUDED.capacity_label, has_pressure_gauge = EXCLUDED.has_pressure_gauge;
-
--- Seed hfo_users (Akun Petugas HFO Rig Lapangan)
-INSERT INTO public.hfo_users (id, rig_id, name, position, role, password) VALUES
-('hfo-bms-07', 'rig-bms-07', 'Ilham Prasetyo', 'HFO Officer Rig BMS-07', 'user', '123456'),
-('hfo-bms-18', 'rig-bms-18', 'Budi Santoso', 'HFO Officer Rig BMS-18', 'user', '123456'),
-('hfo-bms-10', 'rig-bms-10', 'Agus Setiawan', 'HFO Officer Rig BMS-10', 'user', '123456'),
-('hfo-bms-16', 'rig-bms-16', 'Dedi Kurniawan', 'HFO Officer Rig BMS-16', 'user', '123456'),
-('hfo-bms-01', 'rig-bms-01', 'Fajar Ramadhan', 'HFO Officer Rig BMS-01', 'user', '123456')
-ON CONFLICT (id) DO NOTHING;
+ALTER TABLE rigs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE apar_types DISABLE ROW LEVEL SECURITY;
+ALTER TABLE hfo_users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE apars DISABLE ROW LEVEL SECURITY;
+ALTER TABLE inspections DISABLE ROW LEVEL SECURITY;
+ALTER TABLE maintenances DISABLE ROW LEVEL SECURITY;

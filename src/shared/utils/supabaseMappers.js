@@ -86,7 +86,7 @@ export function mapHfoUserToDb(appUser) {
 // ==========================================
 export function mapAparFromDb(row, rigLookup = {}, typeLookup = {}) {
   if (!row) return null;
-  const rig = rigLookup[row.rig_id] || { code: 'BMS-01' };
+  const rig = rigLookup[row.rig_id] || { code: row.rig_id || 'BMS-02' };
 
   // Status mapping: DB 'perlu_perbaikan' <-> UI 'rusak'
   let uiStatus = 'layak';
@@ -98,10 +98,10 @@ export function mapAparFromDb(row, rigLookup = {}, typeLookup = {}) {
     assetCode: row.asset_code,
     rigId: row.rig_id,
     rigCode: rig.code,
-    typeId: row.apar_type_id || 'dry_powder_9kg',
-    brand: row.brand_model || 'Firex',
-    serialNo: row.serial_no || 'TIDAK TERBACA',
-    placement: row.placement,
+    typeId: row.apar_type_id || 'type_powder_9kg',
+    brand: row.brand_model || 'BMS Standard',
+    serialNo: row.serial_no || '-',
+    placement: row.placement || 'Area Kerja Rig',
     charge: row.charge_owner || 'BMS',
     manufactureDate: row.manufacture_date || null,
     manufactureRaw: row.manufacture_date ? '' : 'TIDAK TERBACA',
@@ -115,7 +115,7 @@ export function mapAparFromDb(row, rigLookup = {}, typeLookup = {}) {
       nozle: 'bagus',
       pengamanTabung: 'bagus',
       pinHandle: 'bagus',
-      pressureGauge: row.apar_type_id === 'co2_cylinder' ? 'na' : 'bagus',
+      pressureGauge: (row.apar_type_id === 'type_co2' || row.apar_type_id === 'co2_cylinder') ? 'na' : 'bagus',
       tabung: 'bagus',
     },
     issues: uiStatus === 'rusak' ? ['Perlu Tindakan Perbaikan K3'] : [],
@@ -135,10 +135,10 @@ export function mapAparToDb(appApar) {
     id: appApar.id,
     asset_code: appApar.assetCode,
     rig_id: appApar.rigId,
-    apar_type_id: appApar.typeId || 'dry_powder_9kg',
-    brand_model: appApar.brand || 'Firex',
-    serial_no: appApar.serialNo || 'TIDAK TERBACA',
-    placement: appApar.placement || 'Rig Carrier',
+    apar_type_id: appApar.typeId || 'type_powder_9kg',
+    brand_model: appApar.brand || 'BMS Standard',
+    serial_no: appApar.serialNo || '-',
+    placement: appApar.placement || 'Area Kerja Rig',
     charge_owner: appApar.charge || 'BMS',
     manufacture_date: appApar.manufactureDate || null,
     last_hydrotest_date: appApar.lastHydrotestDate || null,
@@ -181,6 +181,7 @@ export function mapInspectionToDb(appInsp) {
     checklist: appInsp.checklist || {},
     overall_status: appInsp.overallStatus || 'layak',
     notes: appInsp.notes || '',
+    inspection_photo: appInsp.inspectionPhoto || null,
   };
 }
 
@@ -197,7 +198,7 @@ export function mapMaintenanceFromDb(row, aparLookup = {}, rigLookup = {}) {
     aparId: row.apar_id,
     assetCode: apar.assetCode || apar.asset_code || 'APAR-UNKNOWN',
     rigId: row.rig_id,
-    rigCode: rig.code || row.rig_id || 'BMS-01',
+    rigCode: rig.code || row.rig_id || 'BMS-02',
     placement: apar.placement || 'Area Rig Operasional',
     brand: apar.brand || apar.brand_model || 'Firex',
     inspectionId: row.inspection_id || null,
@@ -229,6 +230,7 @@ export function mapMaintenanceToDb(appMaint) {
     action_type: appMaint.actionType || 'perbaikan',
     status: appMaint.status || 'open',
     vendor_name: appMaint.vendorName || 'PT Sepakat HSE Solution',
+    finding_photo: appMaint.findingPhoto || null,
     evidence_photo: appMaint.evidencePhoto || null,
     evidence_uploaded_by: appMaint.evidenceUploadedBy || null,
     repair_notes: appMaint.repairNotes || null,

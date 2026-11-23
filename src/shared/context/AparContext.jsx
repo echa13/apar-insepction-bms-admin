@@ -34,10 +34,13 @@ export function AparProvider({ children }) {
   const [maintenances, setMaintenances] = useState(initialMaintenancesSeed);
   const [inspections, setInspections] = useState([]);
   const [hfoUsers, setHfoUsers] = useState([
-    { id: 'hfo-bms-07', rigId: 'rig-bms-07', name: 'Ilham Prasetyo', position: 'HFO Officer Rig BMS-07', role: 'user', password: '123456' },
-    { id: 'hfo-bms-18', rigId: 'rig-bms-18', name: 'Budi Santoso', position: 'HFO Officer Rig BMS-18', role: 'user', password: '123456' },
-    { id: 'hfo-bms-10', rigId: 'rig-bms-10', name: 'Agus Setiawan', position: 'HFO Officer Rig BMS-10', role: 'user', password: '123456' },
-    { id: 'hfo-bms-16', rigId: 'rig-bms-16', name: 'Dedi Kurniawan', position: 'HFO Officer Rig BMS-16', role: 'user', password: '123456' },
+    { id: 'hfo-bms02-1', rigId: 'BMS-02', name: 'ANDI KURNIAWAN S', position: 'HFO', role: 'user', password: '123456' },
+    { id: 'hfo-bms03-1', rigId: 'BMS-03', name: 'INSANUL ARIF', position: 'HFO', role: 'user', password: '123456' },
+    { id: 'hfo-bms05-1', rigId: 'BMS-05', name: 'HENDRA', position: 'HFO', role: 'user', password: '123456' },
+    { id: 'hfo-bms07-1', rigId: 'BMS-07', name: 'APRIADI S', position: 'HFO', role: 'user', password: '123456' },
+    { id: 'hfo-bms10-1', rigId: 'BMS-10', name: 'ARIF ILYAS', position: 'HFO', role: 'user', password: '123456' },
+    { id: 'hfo-bms16-1', rigId: 'BMS-16', name: 'ANUGRAH BIMA', position: 'HFO', role: 'user', password: '123456' },
+    { id: 'hfo-bms18-1', rigId: 'BMS-18', name: 'DONY HANDRI S', position: 'HFO', role: 'user', password: '123456' },
   ]);
 
   // Koneksi & Status Realtime
@@ -297,7 +300,7 @@ export function AparProvider({ children }) {
   // 3. ACTION CRUD APAR (Tabel 'apars')
   // =========================================================================
   const addApar = async (aparData) => {
-    const rig = rigs.find(r => r.id === aparData.rigId) || { code: 'BMS-01' };
+    const rig = rigs.find(r => r.id === aparData.rigId) || { code: 'BMS-02' };
     const rigClean = rig.code.replace(/[^a-zA-Z0-9]/g, '');
     const countInRig = apars.filter(a => a.rigId === aparData.rigId).length + 1;
     const seq = String(countInRig).padStart(3, '0');
@@ -312,9 +315,9 @@ export function AparProvider({ children }) {
       serialNo: aparData.serialNo?.trim() || 'TIDAK TERBACA',
       rigId: aparData.rigId,
       rigCode: rig.code,
-      typeId: aparData.typeId || 'dry_powder_9kg',
-      brand: aparData.brand || 'Firex',
-      placement: aparData.placement || 'Rig Carrier',
+      typeId: aparData.typeId || 'type_powder_9kg',
+      brand: aparData.brand || 'BMS Standard',
+      placement: aparData.placement || 'Area Kerja Rig',
       manufactureDate: aparData.manufactureDate || null,
       manufactureRaw: aparData.manufactureRaw || '',
       lastHydrotestDate: null,
@@ -329,7 +332,7 @@ export function AparProvider({ children }) {
         nozle: 'bagus',
         pengamanTabung: 'bagus',
         pinHandle: 'bagus',
-        pressureGauge: aparData.typeId === 'co2_cylinder' ? 'na' : 'bagus',
+        pressureGauge: (aparData.typeId === 'type_co2' || aparData.typeId === 'co2_cylinder') ? 'na' : 'bagus',
         tabung: 'bagus',
       },
       issues: aparData.issues || [],
@@ -427,7 +430,7 @@ export function AparProvider({ children }) {
   // =========================================================================
   const addRig = async (code, name, location = '') => {
     const cleanCode = code.trim().toUpperCase();
-    const id = `rig-${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+    const id = cleanCode;
     const newRig = {
       id,
       code: cleanCode,
@@ -690,7 +693,7 @@ export function AparProvider({ children }) {
     const newInspection = {
       id: `insp-${Date.now()}`,
       aparId,
-      rigId: targetApar?.rigId || 'rig-bms-01',
+      rigId: targetApar?.rigId || 'BMS-02',
       inspectorName,
       inspectionDate: today,
       category: 'bulanan',
@@ -715,8 +718,8 @@ export function AparProvider({ children }) {
         id: `maint-${Date.now()}`,
         aparId,
         assetCode: targetApar?.assetCode || 'UNKNOWN',
-        rigId: targetApar?.rigId || 'rig-bms-01',
-        rigCode: targetApar?.rigCode || 'BMS-01',
+        rigId: targetApar?.rigId || 'BMS-02',
+        rigCode: targetApar?.rigCode || 'BMS-02',
         inspectionId: newInspection.id,
         reportedBy: inspectorName,
         reportedAt: new Date().toISOString(),
@@ -724,6 +727,7 @@ export function AparProvider({ children }) {
         status: 'open',
         actionType: 'perbaikan',
         vendorName: 'PT Sepakat HSE Solution',
+        findingPhoto: null,
         evidencePhoto: null,
         evidenceUploadedBy: null,
         repairNotes: null,
@@ -759,7 +763,7 @@ export function AparProvider({ children }) {
   const loginAs = (role, rigId = 'all') => {
     const user = role === 'admin'
       ? { role: 'admin', name: 'Admin HSE Pusat', email: 'hse.admin@besmindo.co.id', rigId: 'all' }
-      : { role: 'user', name: 'Ilham Prasetyo (HFO)', email: 'hfo.bms07@besmindo.co.id', rigId: rigId || 'rig-bms-07' };
+      : { role: 'user', name: 'ANDI KURNIAWAN S (HFO)', email: 'hfo.bms02@besmindo.co.id', rigId: rigId || 'BMS-02' };
     setCurrentUser(user);
     return user;
   };

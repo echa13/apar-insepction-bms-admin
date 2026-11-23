@@ -5,7 +5,7 @@ import { ShieldCheck, Flame, HardHat, ShieldAlert, ArrowRight, CheckCircle2 } fr
 
 export default function LoginPage() {
   const [activeTab, setActiveTab] = useState('admin'); // 'admin' | 'user'
-  const [selectedRigId, setSelectedRigId] = useState('rig-bms-07');
+  const [selectedRigId, setSelectedRigId] = useState('BMS-02');
   const { rigs, loginAs } = useApar();
   const navigate = useNavigate();
 

@@ -27,7 +27,7 @@ export default function UserInspect() {
       nozle: 'bagus',
       pengamanTabung: 'bagus',
       pinHandle: 'bagus',
-      pressureGauge: targetApar?.typeId === 'co2_cylinder' ? 'na' : 'bagus',
+      pressureGauge: (targetApar?.typeId === 'type_co2' || targetApar?.typeId === 'co2_cylinder') ? 'na' : 'bagus',
       tabung: 'bagus',
     }
   );
@@ -49,7 +49,7 @@ export default function UserInspect() {
     );
   }
 
-  const isCo2 = targetApar.typeId === 'co2_cylinder';
+  const isCo2 = targetApar.typeId === 'type_co2' || targetApar.typeId === 'co2_cylinder';
 
   const handleComponentToggle = (comp, status) => {
     setComponents(prev => ({ ...prev, [comp]: status }));

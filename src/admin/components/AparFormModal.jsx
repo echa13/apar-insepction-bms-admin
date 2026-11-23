@@ -8,10 +8,10 @@ export default function AparFormModal({ apar, onClose }) {
   const isEditing = Boolean(apar);
 
   const [formData, setFormData] = useState({
-    rigId: apar?.rigId || rigs[0]?.id || 'rig-bms-07',
+    rigId: apar?.rigId || rigs[0]?.id || 'BMS-02',
     assetCode: apar?.assetCode || '',
     serialNo: apar?.serialNo || '',
-    typeId: apar?.typeId || 'dry_powder_9kg',
+    typeId: apar?.typeId || 'type_powder_9kg',
     brand: apar?.brand || 'Firex (FX-90)',
     placement: apar?.placement || 'Rig Carrier',
     manufactureDate: apar?.manufactureDate || '2024-01-01',
@@ -35,7 +35,7 @@ export default function AparFormModal({ apar, onClose }) {
 
   // Jika tipe CO2, matikan pressure gauge menjadi 'na'
   useEffect(() => {
-    if (formData.typeId === 'co2_cylinder') {
+    if (formData.typeId === 'type_co2' || formData.typeId === 'co2_cylinder') {
       setComponents(prev => ({ ...prev, pressureGauge: 'na' }));
     } else if (components.pressureGauge === 'na') {
       setComponents(prev => ({ ...prev, pressureGauge: 'bagus' }));
@@ -48,8 +48,9 @@ export default function AparFormModal({ apar, onClose }) {
     e.preventDefault();
 
     // Deteksi jika ada komponen yang rusak
+    const isCo2 = formData.typeId === 'type_co2' || formData.typeId === 'co2_cylinder';
     const hasDamagedComp = Object.entries(components).some(([k, v]) => k !== 'pressureGauge' && v === 'rusak') ||
-      (formData.typeId !== 'co2_cylinder' && components.pressureGauge === 'rusak');
+      (!isCo2 && components.pressureGauge === 'rusak');
 
     const issues = [];
     if (components.handle === 'rusak') issues.push('Handle Rusak');
@@ -285,7 +286,7 @@ export default function AparFormModal({ apar, onClose }) {
                 <span className="text-[11px] font-semibold text-slate-600 block mb-1">
                   Pressure Gauge
                 </span>
-                {formData.typeId === 'co2_cylinder' ? (
+                {formData.typeId === 'type_co2' || formData.typeId === 'co2_cylinder' ? (
                   <span className="text-xs font-mono font-bold text-slate-500 py-1 px-2 bg-slate-200 rounded block text-center">
                     N/A (CO2)
                   </span>

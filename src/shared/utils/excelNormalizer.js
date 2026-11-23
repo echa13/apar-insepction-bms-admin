@@ -7,7 +7,7 @@ import { calculateNextHydrotestDate } from './hydrotestUtils.js';
  * Contoh: "Rig BMS -05" -> "BMS-05", "Rig BMS-07" -> "BMS-07"
  */
 export function normalizeRigCode(rawRig) {
-  if (!rawRig) return 'BMS-01';
+  if (!rawRig) return 'BMS-02';
   let clean = String(rawRig).trim();
   // Hapus kata 'Rig' di awal
   clean = clean.replace(/^Rig\s*/i, '');
@@ -28,7 +28,7 @@ export function normalizeRigCode(rawRig) {
     if (matchFormatted) return matchFormatted.code;
   }
 
-  return clean || 'BMS-01';
+  return clean || 'BMS-02';
 }
 
 /**
@@ -37,7 +37,7 @@ export function normalizeRigCode(rawRig) {
 export function getRigIdFromCode(code) {
   const rig = rigsSeed.find(r => r.code === code);
   if (rig) return rig.id;
-  return `rig-${code.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+  return code;
 }
 
 /**
@@ -46,7 +46,7 @@ export function getRigIdFromCode(code) {
 export function normalizeAparType(rawType) {
   if (!rawType) {
     return {
-      typeId: 'dry_powder_9kg',
+      typeId: 'type_powder_9kg',
       brand: 'Standard',
       rawType: 'Tidak Diketahui'
     };
@@ -66,7 +66,7 @@ export function normalizeAparType(rawType) {
   // 1. Karbon Dioksida (CO2)
   if (/co2|co-alfrex|\bco\b|afco/i.test(lower)) {
     return {
-      typeId: 'co2_cylinder',
+      typeId: 'type_co2',
       brand: brand === 'Standard' ? 'Alfrex' : brand,
       rawType: str
     };
@@ -75,7 +75,7 @@ export function normalizeAparType(rawType) {
   // 2. Foam (Busa AFFF)
   if (/foam/i.test(lower)) {
     return {
-      typeId: 'foam_trolley_100l',
+      typeId: 'type_foam_100l',
       brand,
       rawType: str
     };
@@ -84,34 +84,34 @@ export function normalizeAparType(rawType) {
   // 3. Trolley Powder Berkapasitas Besar (150 Lbs / 75 Kg / 150 Found)
   if (/150\s*(found|lbs|dry)|75\s*kg|tonata\s*75|qa15|oa15/i.test(lower)) {
     return {
-      typeId: 'powder_trolley_150lbs',
+      typeId: 'type_powder_75kg',
       brand,
       rawType: str
     };
   }
 
-  // 4. Powder 6 Kg
+  // 4. Clean Agent / Halon Replacement / Gas AF11
+  if (/clean\s*agent|halon|af-?11|hfc/i.test(lower)) {
+    return {
+      typeId: 'type_clean_agent',
+      brand,
+      rawType: str
+    };
+  }
+
+  // 5. Powder 6 Kg
   if (/6\s*kg/i.test(lower)) {
     return {
-      typeId: 'dry_powder_6kg',
+      typeId: 'type_powder_6kg',
       brand,
       rawType: str
     };
   }
 
-  // 5. Powder 4 Kg
-  if (/4\s*kg/i.test(lower)) {
+  // 6. Powder 3 Kg / 4 Kg
+  if (/3\s*kg|4\s*kg/i.test(lower)) {
     return {
-      typeId: 'dry_powder_4kg',
-      brand,
-      rawType: str
-    };
-  }
-
-  // 6. Powder 3 Kg
-  if (/3\s*kg/i.test(lower)) {
-    return {
-      typeId: 'dry_powder_3kg',
+      typeId: 'type_powder_3kg',
       brand,
       rawType: str
     };
@@ -119,7 +119,7 @@ export function normalizeAparType(rawType) {
 
   // 7. Default: Powder 9 Kg ABC (termasuk FIREX FX-90 tanpa penulisan berat)
   return {
-    typeId: 'dry_powder_9kg',
+    typeId: 'type_powder_9kg',
     brand,
     rawType: str
   };
@@ -294,7 +294,7 @@ export function normalizeExcelRow(row, index, currentRigCode) {
 
   const rawType = row.type || row.Type;
   const { typeId, brand, rawType: originalType } = normalizeAparType(rawType);
-  const isCo2 = typeId === 'co2_cylinder';
+  const isCo2 = typeId === 'type_co2';
 
   const rawMfg = row.tahunApar || row['Tahun APAR'];
   const { validDate: manufactureDate, rawText: manufactureRaw } = normalizeDate(rawMfg);
@@ -345,7 +345,7 @@ export function normalizeExcelRow(row, index, currentRigCode) {
  * Normalisasi Array Baris Hasil Import CSV / XLSX
  */
 export function processNormalizedExcelData(rows) {
-  let activeRigCode = 'BMS-01';
+  let activeRigCode = 'BMS-02';
   const aparList = [];
   const anomalyStats = {
     totalRows: 0,
