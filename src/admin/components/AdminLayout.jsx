@@ -46,19 +46,28 @@ export default function AdminLayout() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row font-sans">
       {/* Mobile Topbar */}
-      <div className="lg:hidden bg-slate-900 text-white px-4 py-3 flex items-center justify-between border-b border-slate-800 z-30">
+      <div className="lg:hidden bg-[#0F172A] text-white px-4 py-3 flex items-center justify-between border-b border-slate-800 z-30 sticky top-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center shadow-md shadow-red-600/30">
             <Flame className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-sm font-bold tracking-tight">HSE Admin Panel</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold tracking-tight">HSE Admin Panel</h1>
+              <span className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold uppercase ${
+                isSupabaseConnected ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isSupabaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
+                {isSupabaseConnected ? 'Live' : 'Offline'}
+              </span>
+            </div>
             <p className="text-[10px] text-slate-400">PT Besmindo Muda Sarana</p>
           </div>
         </div>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           className="p-2 rounded-lg bg-slate-800 text-slate-200 hover:text-white"
+          title="Menu Tambahan"
         >
           {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
@@ -66,7 +75,7 @@ export default function AdminLayout() {
 
       {/* Sidebar Desktop & Mobile Drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 w-64 bg-slate-900 text-slate-300 flex flex-col z-40 transition-transform duration-200 ease-in-out border-r border-slate-800 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 w-64 bg-[#0F172A] text-slate-300 flex flex-col z-40 transition-transform duration-200 ease-in-out border-r border-slate-800 lg:translate-x-0 ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -197,7 +206,7 @@ export default function AdminLayout() {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 lg:ml-64 flex flex-col min-w-0">
+      <main className="flex-1 lg:ml-64 flex flex-col min-w-0 pb-24 lg:pb-6">
         {/* Desktop Sticky Header Stats Bar */}
         <header className="hidden lg:flex items-center justify-between px-8 py-3.5 bg-white border-b border-slate-200/80 sticky top-0 z-20 shadow-xs">
           <div>
@@ -247,6 +256,87 @@ export default function AdminLayout() {
           <Outlet />
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation Bar (< lg) */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0F172A] border-t border-slate-800 px-2 py-1.5 flex items-center justify-around shadow-2xl">
+        {/* 1. Dashboard */}
+        <NavLink
+          to="/admin/dashboard"
+          className={({ isActive }) =>
+            `flex flex-col items-center justify-center py-1 flex-1 transition-colors ${
+              isActive ? 'text-[#EF4444] font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`
+          }
+        >
+          <LayoutDashboard className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] tracking-tight">Dashboard</span>
+        </NavLink>
+
+        {/* 2. Unit APAR */}
+        <NavLink
+          to="/admin/apars"
+          className={({ isActive }) =>
+            `flex flex-col items-center justify-center py-1 flex-1 transition-colors ${
+              isActive ? 'text-[#EF4444] font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`
+          }
+        >
+          <Flame className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] tracking-tight">Unit APAR</span>
+        </NavLink>
+
+        {/* 3. Perbaikan (Tengah, Tombol Menonjol Elevated) */}
+        <div className="flex-1 flex justify-center">
+          <NavLink
+            to="/admin/maintenances"
+            className={({ isActive }) =>
+              `relative -mt-6 w-14 h-14 rounded-2xl flex flex-col items-center justify-center shadow-lg transition-transform active:scale-95 ${
+                isActive
+                  ? 'bg-[#DC2626] text-white shadow-red-600/40 ring-4 ring-[#0F172A]'
+                  : 'bg-[#DC2626] text-white shadow-red-600/30 hover:bg-red-700 ring-4 ring-[#0F172A]'
+              }`
+            }
+          >
+            <Wrench className="w-6 h-6" />
+            <span className="text-[9px] font-bold mt-0.5 leading-none">Perbaikan</span>
+            {pendingActionsCount > 0 && (
+              <span className={`absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full text-[10px] font-black flex items-center justify-center border-2 border-[#0F172A] ${
+                pendingReviewCount > 0
+                  ? 'bg-blue-500 text-white animate-pulse'
+                  : 'bg-amber-400 text-slate-950'
+              }`}>
+                {pendingActionsCount}
+              </span>
+            )}
+          </NavLink>
+        </div>
+
+        {/* 4. Data Rig */}
+        <NavLink
+          to="/admin/rigs"
+          className={({ isActive }) =>
+            `flex flex-col items-center justify-center py-1 flex-1 transition-colors ${
+              isActive ? 'text-[#EF4444] font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`
+          }
+        >
+          <Building2 className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] tracking-tight">Data Rig</span>
+        </NavLink>
+
+        {/* 5. Laporan */}
+        <NavLink
+          to="/admin/reports"
+          className={({ isActive }) =>
+            `flex flex-col items-center justify-center py-1 flex-1 transition-colors ${
+              isActive ? 'text-[#EF4444] font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`
+          }
+        >
+          <FileSpreadsheet className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] tracking-tight">Laporan</span>
+        </NavLink>
+      </nav>
     </div>
   );
 }

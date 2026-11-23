@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { useApar } from '../../shared/context/AparContext';
 import {
   X,
@@ -18,16 +19,38 @@ import {
 } from 'lucide-react';
 import { formatHseDate } from '../../shared/utils/hydrotestUtils';
 import { confirmActionAlert, showErrorAlert } from '../../shared/utils/alertUtils';
+import { getTicketBeforePhoto } from '../../shared/utils/supabaseMappers';
 
 export default function MaintenanceVerifyModal({ ticket, onClose }) {
-  const { verifyMaintenance, apars } = useApar();
+  const { verifyMaintenance, apars, inspections } = useApar();
   const [adminNotes, setAdminNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
+  const [beforeImgError, setBeforeImgError] = useState(false);
+  const [afterImgError, setAfterImgError] = useState(false);
+
+  // Esc key listener untuk menutup Lightbox tanpa menutup modal validasi
+  useEffect(() => {
+    if (!lightboxImage) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setLightboxImage(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [lightboxImage]);
 
   if (!ticket) return null;
 
   const linkedApar = apars.find(a => a.id === ticket.aparId || a.assetCode === ticket.assetCode);
+
+  // Logika Fallback Berantai Foto Temuan Awal (Before)
+  const beforePhoto = getTicketBeforePhoto(ticket, inspections);
+  const afterPhoto = ticket.evidencePhoto || ticket.evidence_photo || null;
 
   const handleApprove = async () => {
     const result = await confirmActionAlert({
@@ -75,9 +98,14 @@ export default function MaintenanceVerifyModal({ ticket, onClose }) {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xs">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-5xl max-h-[94vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-          
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xs"
+        onClick={onClose}
+      >
+        <div
+          className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-5xl max-h-[94vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Modal Header */}
           <div className="px-6 py-4 border-b border-slate-800 bg-slate-900 text-white flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -99,8 +127,9 @@ export default function MaintenanceVerifyModal({ ticket, onClose }) {
               </div>
             </div>
             <button
+              type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -151,32 +180,54 @@ export default function MaintenanceVerifyModal({ ticket, onClose }) {
               </div>
 
               {/* Foto Temuan Awal */}
-              <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-300 aspect-video flex items-center justify-center group">
-                {ticket.findingPhoto ? (
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (beforePhoto && !beforeImgError) {
+                    setLightboxImage({
+                      src: beforePhoto,
+                      title: `Foto Temuan Awal (Before) — ${ticket.assetCode}`
+                    });
+                  }
+                }}
+                className={`relative rounded-xl overflow-hidden bg-slate-900 border border-slate-300 aspect-video flex items-center justify-center group ${
+                  beforePhoto && !beforeImgError ? 'cursor-pointer' : ''
+                }`}
+              >
+                {beforePhoto && !beforeImgError ? (
                   <>
                     <img
-                      src={ticket.findingPhoto}
-                      alt="Foto Temuan Kerusakan Awal"
+                      src={beforePhoto}
+                      alt="Foto Temuan Kerusakan Awal (Before)"
+                      onError={() => setBeforeImgError(true)}
                       className="w-full h-full object-cover transition duration-200 group-hover:scale-105"
                     />
                     <button
                       type="button"
-                      onClick={() => setLightboxImage({ src: ticket.findingPhoto, title: `Foto Temuan Awal — ${ticket.assetCode}` })}
-                      className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white gap-2 font-semibold text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLightboxImage({
+                          src: beforePhoto,
+                          title: `Foto Temuan Awal (Before) — ${ticket.assetCode}`
+                        });
+                      }}
+                      className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white gap-2 font-semibold text-xs cursor-pointer"
                     >
                       <ZoomIn className="w-4 h-4" />
-                      <span>Perbesar Foto</span>
+                      <span>Inspect / Perbesar Foto</span>
                     </button>
                   </>
                 ) : (
                   <div className="p-6 text-center text-slate-400">
                     <Camera className="w-10 h-10 mx-auto mb-2 opacity-40 text-rose-400" />
                     <p className="text-xs font-semibold text-slate-300">Foto Temuan Fisik Awal</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Tidak dilampirkan oleh pelapor lapangan</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      {beforeImgError ? 'File foto tidak dapat dimuat' : 'Tidak dilampirkan oleh pelapor lapangan'}
+                    </p>
                   </div>
                 )}
-                <div className="absolute top-2 left-2 px-2 py-0.5 bg-rose-600/90 text-white rounded text-[10px] font-bold">
-                  KONDISI AWAL
+                <div className="absolute top-2 left-2 px-2 py-0.5 bg-rose-600/90 text-white rounded text-[10px] font-bold shadow-xs">
+                  KONDISI AWAL (BEFORE)
                 </div>
               </div>
 
@@ -223,32 +274,54 @@ export default function MaintenanceVerifyModal({ ticket, onClose }) {
               </div>
 
               {/* Foto Bukti Perbaikan */}
-              <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-300 aspect-video flex items-center justify-center group">
-                {ticket.evidencePhoto ? (
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (afterPhoto && !afterImgError) {
+                    setLightboxImage({
+                      src: afterPhoto,
+                      title: `Foto Bukti Perbaikan (After) — ${ticket.assetCode}`
+                    });
+                  }
+                }}
+                className={`relative rounded-xl overflow-hidden bg-slate-900 border border-slate-300 aspect-video flex items-center justify-center group ${
+                  afterPhoto && !afterImgError ? 'cursor-pointer' : ''
+                }`}
+              >
+                {afterPhoto && !afterImgError ? (
                   <>
                     <img
-                      src={ticket.evidencePhoto}
-                      alt="Foto Bukti Hasil Perbaikan"
+                      src={afterPhoto}
+                      alt="Foto Bukti Hasil Perbaikan (After)"
+                      onError={() => setAfterImgError(true)}
                       className="w-full h-full object-cover transition duration-200 group-hover:scale-105"
                     />
                     <button
                       type="button"
-                      onClick={() => setLightboxImage({ src: ticket.evidencePhoto, title: `Bukti Hasil Perbaikan — ${ticket.assetCode}` })}
-                      className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white gap-2 font-semibold text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLightboxImage({
+                          src: afterPhoto,
+                          title: `Foto Bukti Perbaikan (After) — ${ticket.assetCode}`
+                        });
+                      }}
+                      className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white gap-2 font-semibold text-xs cursor-pointer"
                     >
                       <ZoomIn className="w-4 h-4" />
-                      <span>Perbesar Bukti</span>
+                      <span>Inspect / Perbesar Bukti</span>
                     </button>
                   </>
                 ) : (
                   <div className="p-6 text-center text-slate-400">
                     <FileText className="w-10 h-10 mx-auto mb-2 opacity-40 text-emerald-400" />
                     <p className="text-xs font-semibold text-slate-300">Belum Ada Foto Bukti</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Personil lapangan belum mengunggah file bukti</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      {afterImgError ? 'File foto tidak dapat dimuat' : 'Personil lapangan belum mengunggah file bukti'}
+                    </p>
                   </div>
                 )}
-                <div className="absolute top-2 left-2 px-2 py-0.5 bg-emerald-600/90 text-white rounded text-[10px] font-bold">
-                  HASIL PERBAIKAN
+                <div className="absolute top-2 left-2 px-2 py-0.5 bg-emerald-600/90 text-white rounded text-[10px] font-bold shadow-xs">
+                  HASIL PERBAIKAN (AFTER)
                 </div>
                 <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-slate-950/80 backdrop-blur rounded text-[10px] text-slate-200 font-mono">
                   GPS: Rig Active • Verified
@@ -282,83 +355,112 @@ export default function MaintenanceVerifyModal({ ticket, onClose }) {
                 </div>
               </div>
             </div>
+
           </div>
 
-          {/* Admin Verification Input Field */}
-          <div className="px-6 py-3.5 bg-white border-t border-slate-200 space-y-2">
-            <label className="block text-xs font-bold text-slate-800">
-              Catatan Verifikasi Admin HSE <span className="text-slate-400 font-normal">(Wajib jika menolak, opsional jika menyetujui):</span>
-            </label>
-            <input
-              type="text"
-              value={adminNotes}
-              onChange={(e) => setAdminNotes(e.target.value)}
-              placeholder="Contoh: Hasil perbaikan komponen hose sesuai standar / Harap pasang klem segel baru..."
-              className="w-full text-xs p-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 font-medium"
-            />
-          </div>
-
-          {/* Modal Footer Controls */}
-          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="text-xs text-slate-500">
-              {ticket.actionType === 'hydrotest' ? (
-                <span className="text-blue-700 font-semibold">
-                  * Uji Tekan (Hydrotest): Persetujuan otomatis memperbarui tanggal jatuh tempo APAR +5 tahun ke depan.
-                </span>
-              ) : (
-                <span>
-                  * Persetujuan otomatis mengembalikan status APAR menjadi <strong className="text-emerald-700">Layak Pakai</strong>.
-                </span>
-              )}
+          {/* Form Validasi & Keputusan Admin */}
+          <div className="p-6 border-t border-slate-200 bg-white space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Catatan Verifikasi Admin HSE:
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Contoh: Hasil penggantian selang dan uji tekanan 14 bar valid. Segel terpasang rapi. Disetujui."
+                value={adminNotes}
+                onChange={(e) => setAdminNotes(e.target.value)}
+                className="w-full text-xs p-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                * Wajib diisi jika menolak hasil perbaikan agar kru lapangan mengetahui catatan revisi yang diperlukan.
+              </p>
             </div>
 
-            <div className="flex items-center gap-2.5 self-end sm:self-auto">
+            {/* Action Buttons */}
+            <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2">
               <button
                 type="button"
-                onClick={handleReject}
-                disabled={isSubmitting}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 transition shadow-2xs disabled:opacity-50"
+                onClick={onClose}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Tolak & Minta Perbaikan Ulang</span>
+                Tutup / Nanti Saja
               </button>
 
-              <button
-                type="button"
-                onClick={handleApprove}
-                disabled={isSubmitting}
-                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-md shadow-emerald-600/20 disabled:opacity-50"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Setujui & Tutup Tiket</span>
-              </button>
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleReject}
+                  disabled={isSubmitting}
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 transition disabled:opacity-50 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Tolak & Minta Perbaikan Ulang</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleApprove}
+                  disabled={isSubmitting}
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Setujui & Tutup Tiket</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Lightbox Preview Modal for Zooming Photos */}
-      {lightboxImage && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="max-w-4xl w-full bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col">
-            <div className="px-4 py-3 bg-slate-950 flex items-center justify-between text-white border-b border-slate-800">
-              <span className="text-xs font-bold">{lightboxImage.title}</span>
+      {/* Fullscreen Image Preview Lightbox via React Portal (z-[9999] menimpa modal) */}
+      {lightboxImage && typeof document !== 'undefined' && ReactDOM.createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={(e) => {
+            e.stopPropagation();
+            setLightboxImage(null);
+          }}
+        >
+          {/* Lightbox Container */}
+          <div
+            className="relative max-w-5xl w-full max-h-[92vh] flex flex-col items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top Bar with Title and Close Button */}
+            <div className="w-full flex items-center justify-between text-white px-3 py-2 mb-2 bg-slate-900/90 backdrop-blur rounded-xl border border-slate-700/60 shadow-xl">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-xs sm:text-sm font-bold tracking-tight">
+                  {lightboxImage.title}
+                </span>
+              </div>
               <button
-                onClick={() => setLightboxImage(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxImage(null);
+                }}
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition cursor-pointer"
+                title="Tutup (Esc)"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-4 flex items-center justify-center max-h-[80vh] overflow-auto">
+
+            {/* Image Full Size */}
+            <div className="relative flex items-center justify-center w-full overflow-hidden rounded-xl bg-slate-950/70 border border-slate-800 shadow-2xl">
               <img
                 src={lightboxImage.src}
                 alt={lightboxImage.title}
-                className="max-h-[75vh] w-auto rounded-lg object-contain"
+                className="max-h-[82vh] max-w-[92vw] object-contain rounded-xl shadow-2xl"
               />
             </div>
+            <p className="text-[11px] text-slate-400 mt-2 text-center">
+              Klik di luar gambar atau tekan tombol <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-mono">ESC</kbd> untuk menutup
+            </p>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

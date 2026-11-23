@@ -152,19 +152,29 @@ export function mapAparToDb(appApar) {
 // ==========================================
 export function mapInspectionFromDb(row) {
   if (!row) return null;
+  const photo = row.inspection_photo || row.inspectionPhoto || row.checklist?.photo || row.checklist?.inspection_photo || null;
+
   return {
     id: row.id,
     aparId: row.apar_id,
+    apar_id: row.apar_id,
     rigId: row.rig_id,
+    rig_id: row.rig_id,
     inspectorName: row.inspector_name || 'HFO Lapangan',
+    inspector_name: row.inspector_name,
     inspectionDate: row.inspection_date,
+    inspection_date: row.inspection_date,
     category: row.category,
     thirdPartyVendor: row.third_party_vendor,
+    third_party_vendor: row.third_party_vendor,
     checklist: row.checklist || {},
     overallStatus: row.overall_status,
+    overall_status: row.overall_status,
     notes: row.notes,
-    inspectionPhoto: row.inspection_photo || row.inspectionPhoto || row.checklist?.photo || row.checklist?.inspection_photo || null,
+    inspectionPhoto: photo,
+    inspection_photo: photo,
     createdAt: row.created_at,
+    created_at: row.created_at,
   };
 }
 
@@ -172,16 +182,16 @@ export function mapInspectionToDb(appInsp) {
   if (!appInsp) return null;
   return {
     id: appInsp.id,
-    apar_id: appInsp.aparId,
-    rig_id: appInsp.rigId,
-    inspector_name: appInsp.inspectorName || 'HFO Inspector',
-    inspection_date: appInsp.inspectionDate || new Date().toISOString().split('T')[0],
+    apar_id: appInsp.aparId || appInsp.apar_id,
+    rig_id: appInsp.rigId || appInsp.rig_id,
+    inspector_name: appInsp.inspectorName || appInsp.inspector_name || 'HFO Inspector',
+    inspection_date: appInsp.inspectionDate || appInsp.inspection_date || new Date().toISOString().split('T')[0],
     category: appInsp.category || 'bulanan',
-    third_party_vendor: appInsp.thirdPartyVendor || 'PT Sepakat HSE Solution',
+    third_party_vendor: appInsp.thirdPartyVendor || appInsp.third_party_vendor || 'PT Sepakat HSE Solution',
     checklist: appInsp.checklist || {},
-    overall_status: appInsp.overallStatus || 'layak',
+    overall_status: appInsp.overallStatus || appInsp.overall_status || 'layak',
     notes: appInsp.notes || '',
-    inspection_photo: appInsp.inspectionPhoto || null,
+    inspection_photo: appInsp.inspectionPhoto || appInsp.inspection_photo || null,
   };
 }
 
@@ -193,28 +203,46 @@ export function mapMaintenanceFromDb(row, aparLookup = {}, rigLookup = {}) {
   const apar = aparLookup[row.apar_id] || {};
   const rig = rigLookup[row.rig_id] || {};
 
+  const findingPhoto = row.finding_photo || row.findingPhoto || (row.evidence_photo && row.status === 'open' ? row.evidence_photo : null) || null;
+  const evidencePhoto = row.evidence_photo || row.evidencePhoto || null;
+
   return {
     id: row.id,
     aparId: row.apar_id,
+    apar_id: row.apar_id,
     assetCode: apar.assetCode || apar.asset_code || 'APAR-UNKNOWN',
+    asset_code: apar.assetCode || apar.asset_code || 'APAR-UNKNOWN',
     rigId: row.rig_id,
+    rig_id: row.rig_id,
     rigCode: rig.code || row.rig_id || 'BMS-02',
     placement: apar.placement || 'Area Rig Operasional',
     brand: apar.brand || apar.brand_model || 'Firex',
-    inspectionId: row.inspection_id || null,
+    inspectionId: row.inspection_id || row.inspectionId || null,
+    inspection_id: row.inspection_id || row.inspectionId || null,
     reportedBy: row.reported_by || 'HFO Lapangan',
+    reported_by: row.reported_by || 'HFO Lapangan',
     issueDescription: row.issue_description || '',
+    issue_description: row.issue_description || '',
     actionType: row.action_type || 'perbaikan',
+    action_type: row.action_type || 'perbaikan',
     status: row.status || 'open',
     vendorName: row.vendor_name || 'PT Sepakat HSE Solution',
-    findingPhoto: row.finding_photo || row.findingPhoto || (row.evidence_photo && row.status === 'open' ? row.evidence_photo : null) || null,
-    evidencePhoto: row.evidence_photo || null,
-    evidenceUploadedBy: row.evidence_uploaded_by || null,
-    repairNotes: row.repair_notes || null,
-    adminNotes: row.admin_notes || null,
+    vendor_name: row.vendor_name || 'PT Sepakat HSE Solution',
+    findingPhoto: findingPhoto,
+    finding_photo: findingPhoto,
+    evidencePhoto: evidencePhoto,
+    evidence_photo: evidencePhoto,
+    evidenceUploadedBy: row.evidence_uploaded_by || row.evidenceUploadedBy || null,
+    evidence_uploaded_by: row.evidence_uploaded_by || row.evidenceUploadedBy || null,
+    repairNotes: row.repair_notes || row.repairNotes || null,
+    repair_notes: row.repair_notes || row.repairNotes || null,
+    adminNotes: row.admin_notes || row.adminNotes || null,
+    admin_notes: row.admin_notes || row.adminNotes || null,
     createdAt: row.created_at,
+    created_at: row.created_at,
     reportedAt: row.created_at,
     resolvedAt: row.resolved_at || null,
+    resolved_at: row.resolved_at || null,
   };
 }
 
@@ -222,19 +250,74 @@ export function mapMaintenanceToDb(appMaint) {
   if (!appMaint) return null;
   return {
     id: appMaint.id,
-    apar_id: appMaint.aparId,
-    rig_id: appMaint.rigId,
-    inspection_id: appMaint.inspectionId || null,
-    reported_by: appMaint.reportedBy || 'HFO Lapangan',
-    issue_description: appMaint.issueDescription,
-    action_type: appMaint.actionType || 'perbaikan',
+    apar_id: appMaint.aparId || appMaint.apar_id,
+    rig_id: appMaint.rigId || appMaint.rig_id,
+    inspection_id: appMaint.inspectionId || appMaint.inspection_id || null,
+    reported_by: appMaint.reportedBy || appMaint.reported_by || 'HFO Lapangan',
+    issue_description: appMaint.issueDescription || appMaint.issue_description,
+    action_type: appMaint.actionType || appMaint.action_type || 'perbaikan',
     status: appMaint.status || 'open',
-    vendor_name: appMaint.vendorName || 'PT Sepakat HSE Solution',
-    finding_photo: appMaint.findingPhoto || null,
-    evidence_photo: appMaint.evidencePhoto || null,
-    evidence_uploaded_by: appMaint.evidenceUploadedBy || null,
-    repair_notes: appMaint.repairNotes || null,
-    admin_notes: appMaint.adminNotes || null,
-    resolved_at: appMaint.resolvedAt || null,
+    vendor_name: appMaint.vendorName || appMaint.vendor_name || 'PT Sepakat HSE Solution',
+    finding_photo: appMaint.findingPhoto || appMaint.finding_photo || null,
+    evidence_photo: appMaint.evidencePhoto || appMaint.evidence_photo || null,
+    evidence_uploaded_by: appMaint.evidenceUploadedBy || appMaint.evidence_uploaded_by || null,
+    repair_notes: appMaint.repairNotes || appMaint.repair_notes || null,
+    admin_notes: appMaint.adminNotes || appMaint.admin_notes || null,
+    resolved_at: appMaint.resolvedAt || appMaint.resolved_at || null,
   };
+}
+
+/**
+ * Chained Fallback Helper untuk Mendapatkan Foto Temuan Awal (Before)
+ * 1. Cek ticket.findingPhoto || ticket.finding_photo
+ * 2. Cek inspeksi terkait berdasarkan ticket.inspectionId
+ * 3. Cek inspeksi terakhir APAR terkait yang 'tidak_layak' dan punya foto
+ */
+export function getTicketBeforePhoto(ticket, inspections = []) {
+  if (!ticket) return null;
+
+  // 1. Cek langsung di tiket
+  if (ticket.findingPhoto) return ticket.findingPhoto;
+  if (ticket.finding_photo) return ticket.finding_photo;
+
+  // 2. Cek inspeksi terkait berdasarkan inspectionId
+  const inspId = ticket.inspectionId || ticket.inspection_id;
+  if (inspId && Array.isArray(inspections)) {
+    const matched = inspections.find(i => i.id === inspId);
+    if (matched && (matched.inspectionPhoto || matched.inspection_photo)) {
+      return matched.inspectionPhoto || matched.inspection_photo;
+    }
+  }
+
+  // 3. Cek inspeksi terakhir APAR terkait yang 'tidak_layak' dan punya foto
+  const aparId = ticket.aparId || ticket.apar_id;
+  const assetCode = ticket.assetCode || ticket.asset_code;
+  if (Array.isArray(inspections) && (aparId || assetCode)) {
+    const aparInsps = inspections.filter(i =>
+      (i.aparId === aparId || i.aparId === assetCode || i.apar_id === aparId) &&
+      (i.inspectionPhoto || i.inspection_photo)
+    );
+
+    if (aparInsps.length > 0) {
+      const sorted = [...aparInsps].sort((a, b) =>
+        new Date(b.inspectionDate || b.inspection_date || b.createdAt || b.created_at || 0) -
+        new Date(a.inspectionDate || a.inspection_date || a.createdAt || a.created_at || 0)
+      );
+
+      // Prioritas 1: temuan yang overallStatus === 'tidak_layak'
+      const damagedOne = sorted.find(i => i.overallStatus === 'tidak_layak' || i.overall_status === 'tidak_layak');
+      if (damagedOne) {
+        return damagedOne.inspectionPhoto || damagedOne.inspection_photo;
+      }
+      return sorted[0].inspectionPhoto || sorted[0].inspection_photo;
+    }
+  }
+
+  // 4. Cadangan jika status open dan evidencePhoto terisi saat dibuat
+  if (ticket.status === 'open') {
+    if (ticket.evidencePhoto) return ticket.evidencePhoto;
+    if (ticket.evidence_photo) return ticket.evidence_photo;
+  }
+
+  return null;
 }

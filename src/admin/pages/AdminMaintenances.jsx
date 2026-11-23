@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { useApar } from '../../shared/context/AparContext';
 import { formatHseDate } from '../../shared/utils/hydrotestUtils';
 import MaintenanceVerifyModal from '../components/MaintenanceVerifyModal';
@@ -23,9 +24,10 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { notifySuccess, showErrorAlert, confirmActionAlert } from '../../shared/utils/alertUtils';
+import { getTicketBeforePhoto } from '../../shared/utils/supabaseMappers';
 
 export default function AdminMaintenances() {
-  const { maintenances, apars, rigs, dispatchMaintenance, createManualMaintenance } = useApar();
+  const { maintenances, apars, rigs, inspections, dispatchMaintenance, createManualMaintenance } = useApar();
 
   // Status Tabs
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'open' | 'in_progress' | 'pending_review' | 'closed'
@@ -49,6 +51,18 @@ export default function AdminMaintenances() {
 
   // Lightbox Image Preview
   const [previewPhoto, setPreviewPhoto] = useState(null);
+
+  useEffect(() => {
+    if (!previewPhoto) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setPreviewPhoto(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [previewPhoto]);
 
   const filteredTickets = useMemo(() => {
     return maintenances.filter(m => {
@@ -276,26 +290,32 @@ export default function AdminMaintenances() {
                 {/* Right Section: Thumbnail Photo & Action Buttons */}
                 <div className="flex items-center gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
                   {/* Thumbnail Preview if Photo Available */}
-                  {(ticket.findingPhoto || ticket.evidencePhoto) && (
-                    <button
-                      type="button"
-                      onClick={() => setPreviewPhoto({
-                        src: ticket.evidencePhoto || ticket.findingPhoto,
-                        title: `${ticket.assetCode} — ${ticket.evidencePhoto ? 'Bukti Perbaikan' : 'Foto Temuan Awal'}`
-                      })}
-                      className="w-12 h-12 rounded-xl border border-slate-200 overflow-hidden relative group shrink-0 shadow-2xs hover:border-blue-400 transition"
-                      title="Klik untuk perbesar foto"
-                    >
-                      <img
-                        src={ticket.evidencePhoto || ticket.findingPhoto}
-                        alt="Thumbnail"
-                        className="w-full h-full object-cover group-hover:scale-110 transition"
-                      />
-                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
-                        <ZoomIn className="w-3.5 h-3.5" />
-                      </div>
-                    </button>
-                  )}
+                  {(() => {
+                    const beforePhoto = getTicketBeforePhoto(ticket, inspections);
+                    const thumbSrc = ticket.evidencePhoto || ticket.evidence_photo || beforePhoto;
+                    if (!thumbSrc) return null;
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewPhoto({
+                          src: thumbSrc,
+                          title: `${ticket.assetCode} — ${ticket.evidencePhoto || ticket.evidence_photo ? 'Bukti Perbaikan (After)' : 'Foto Temuan Awal (Before)'}`
+                        })}
+                        className="w-12 h-12 rounded-xl border border-slate-200 overflow-hidden relative group shrink-0 shadow-2xs hover:border-blue-400 transition cursor-pointer"
+                        title="Klik untuk perbesar foto"
+                      >
+                        <img
+                          src={thumbSrc}
+                          alt="Thumbnail"
+                          className="w-full h-full object-cover group-hover:scale-110 transition"
+                        />
+                        <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
+                          <ZoomIn className="w-3.5 h-3.5" />
+                        </div>
+                      </button>
+                    );
+                  })()}
 
                   {/* Actions Depending on Status */}
                   {isOpen && (
@@ -410,28 +430,45 @@ export default function AdminMaintenances() {
                 {/* Preview Foto Temuan Awal */}
                 <div className="pt-2 border-t border-slate-200">
                   <span className="text-slate-400 block text-[11px] mb-1">Foto Temuan Awal:</span>
-                  {dispatchTicket.findingPhoto ? (
-                    <div className="relative rounded-lg overflow-hidden border border-slate-200 h-32 bg-slate-900 flex items-center justify-center">
-                      <img
-                        src={dispatchTicket.findingPhoto}
-                        alt="Temuan Awal"
-                        className="w-full h-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setPreviewPhoto({ src: dispatchTicket.findingPhoto, title: `Foto Temuan Awal — ${dispatchTicket.assetCode}` })}
-                        className="absolute bottom-2 right-2 px-2 py-1 rounded bg-slate-950/80 text-white text-[10px] font-semibold flex items-center gap-1"
-                      >
-                        <ZoomIn className="w-3 h-3" />
-                        <span>Perbesar</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="p-3 rounded-lg bg-white border border-dashed border-slate-300 text-slate-400 text-center flex items-center justify-center gap-1.5">
-                      <Camera className="w-4 h-4 text-slate-300" />
-                      <span>Foto temuan awal tidak dilampirkan oleh pelapor</span>
-                    </div>
-                  )}
+                  {(() => {
+                    const beforePhoto = getTicketBeforePhoto(dispatchTicket, inspections);
+                    return beforePhoto ? (
+                      <div className="relative rounded-lg overflow-hidden border border-slate-200 h-36 bg-slate-900 flex items-center justify-center">
+                        <img
+                          src={beforePhoto}
+                          alt="Temuan Awal"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            if (e.currentTarget.parentElement) {
+                              const fallback = e.currentTarget.parentElement.querySelector('.img-error-fallback');
+                              if (fallback) fallback.style.display = 'flex';
+                            }
+                          }}
+                        />
+                        <div className="img-error-fallback hidden absolute inset-0 items-center justify-center bg-slate-800 text-slate-400 text-xs gap-1.5">
+                          <Camera className="w-4 h-4 text-slate-500" />
+                          <span>Gagal memuat gambar</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewPhoto({ src: beforePhoto, title: `Foto Temuan Awal — ${dispatchTicket.assetCode}` });
+                          }}
+                          className="absolute bottom-2 right-2 px-2.5 py-1 rounded-md bg-slate-950/80 hover:bg-slate-900 text-white text-[11px] font-semibold flex items-center gap-1 shadow-md transition-colors cursor-pointer"
+                        >
+                          <ZoomIn className="w-3.5 h-3.5" />
+                          <span>Perbesar</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-lg bg-white border border-dashed border-slate-300 text-slate-400 text-center flex items-center justify-center gap-1.5">
+                        <Camera className="w-4 h-4 text-slate-300" />
+                        <span>Foto temuan awal tidak dilampirkan oleh pelapor</span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -591,28 +628,41 @@ export default function AdminMaintenances() {
         />
       )}
 
-      {/* Lightbox Quick Viewer */}
-      {previewPhoto && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
-          <div className="max-w-3xl w-full bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col">
-            <div className="px-4 py-3 bg-slate-950 flex items-center justify-between text-white border-b border-slate-800">
-              <span className="text-xs font-bold">{previewPhoto.title}</span>
+      {/* Lightbox Quick Viewer via Portal */}
+      {previewPhoto && typeof document !== 'undefined' && ReactDOM.createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setPreviewPhoto(null)}
+          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-4xl w-full flex flex-col items-center"
+          >
+            <div className="w-full flex items-center justify-between text-white pb-3 px-1">
+              <span className="text-sm font-semibold tracking-wide drop-shadow-sm">
+                {previewPhoto.title || 'Foto APAR'}
+              </span>
               <button
+                type="button"
                 onClick={() => setPreviewPhoto(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
+                aria-label="Tutup Pratinjau Foto"
+                className="p-2 rounded-full bg-white/10 hover:bg-white/25 text-white backdrop-blur-sm transition-all focus:outline-none focus:ring-2 focus:ring-white/50 cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-4 flex items-center justify-center max-h-[75vh] overflow-auto">
+            <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-slate-950/60 max-h-[82vh] max-w-[92vw] flex items-center justify-center">
               <img
                 src={previewPhoto.src}
-                alt={previewPhoto.title}
-                className="max-h-[70vh] w-auto rounded-lg object-contain"
+                alt={previewPhoto.title || 'Preview'}
+                className="max-h-[80vh] max-w-[90vw] object-contain select-none"
               />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
