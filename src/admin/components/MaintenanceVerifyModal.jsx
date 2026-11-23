@@ -18,7 +18,7 @@ import { confirmActionAlert, showErrorAlert } from '../../shared/utils/alertUtil
 import { getTicketBeforePhoto } from '../../shared/utils/supabaseMappers';
 
 export default function MaintenanceVerifyModal({ ticket, onClose }) {
-  const { verifyMaintenance, apars, inspections } = useApar();
+  const { verifyMaintenance, apars, inspections, maintenances } = useApar();
   const [adminNotes, setAdminNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
@@ -45,7 +45,7 @@ export default function MaintenanceVerifyModal({ ticket, onClose }) {
   const linkedApar = apars.find(a => a.id === ticket.aparId || a.assetCode === ticket.assetCode);
 
   // Logika Fallback Berantai Foto Temuan Awal (Before)
-  const beforePhoto = getTicketBeforePhoto(ticket, inspections);
+  const beforePhoto = getTicketBeforePhoto(ticket, inspections, maintenances);
   const afterPhoto = ticket.evidencePhoto || ticket.evidence_photo || null;
 
   const handleApprove = async () => {

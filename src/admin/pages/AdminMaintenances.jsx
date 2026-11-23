@@ -291,7 +291,7 @@ export default function AdminMaintenances() {
                 <div className="flex items-center gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
                   {/* Thumbnail Preview if Photo Available */}
                   {(() => {
-                    const beforePhoto = getTicketBeforePhoto(ticket, inspections);
+                    const beforePhoto = getTicketBeforePhoto(ticket, inspections, maintenances);
                     const thumbSrc = ticket.evidencePhoto || ticket.evidence_photo || beforePhoto;
                     if (!thumbSrc) return null;
 
@@ -431,7 +431,7 @@ export default function AdminMaintenances() {
                 <div className="pt-2 border-t border-slate-200">
                   <span className="text-slate-400 block text-[11px] mb-1">Foto Temuan Awal:</span>
                   {(() => {
-                    const beforePhoto = getTicketBeforePhoto(dispatchTicket, inspections);
+                    const beforePhoto = getTicketBeforePhoto(dispatchTicket, inspections, maintenances);
                     return beforePhoto ? (
                       <div className="relative rounded-lg overflow-hidden border border-slate-200 h-36 bg-slate-900 flex items-center justify-center">
                         <img

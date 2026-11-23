@@ -190,6 +190,13 @@ export function mapInspectionFromDb(row) {
 
 export function mapInspectionToDb(appInsp) {
   if (!appInsp) return null;
+  const photo = appInsp.inspectionPhoto || appInsp.inspection_photo || appInsp.checklist?.photo || appInsp.checklist?.inspection_photo || null;
+  const baseChecklist = appInsp.checklist || {};
+  const checklistWithPhoto = {
+    ...baseChecklist,
+    ...(photo ? { photo, inspection_photo: photo } : {})
+  };
+
   return {
     id: appInsp.id,
     apar_id: appInsp.aparId || appInsp.apar_id,
@@ -198,10 +205,9 @@ export function mapInspectionToDb(appInsp) {
     inspection_date: appInsp.inspectionDate || appInsp.inspection_date || new Date().toISOString().split('T')[0],
     category: appInsp.category || 'bulanan',
     third_party_vendor: appInsp.thirdPartyVendor || appInsp.third_party_vendor || 'PT Sepakat HSE Solution',
-    checklist: appInsp.checklist || {},
+    checklist: checklistWithPhoto,
     overall_status: appInsp.overallStatus || appInsp.overall_status || 'layak',
     notes: appInsp.notes || '',
-    inspection_photo: appInsp.inspectionPhoto || appInsp.inspection_photo || null,
   };
 }
 
@@ -213,7 +219,8 @@ export function mapMaintenanceFromDb(row, aparLookup = {}, rigLookup = {}) {
   const apar = aparLookup[row.apar_id] || {};
   const rig = rigLookup[row.rig_id] || {};
 
-  const findingPhoto = row.finding_photo || row.findingPhoto || (row.evidence_photo && row.status === 'open' ? row.evidence_photo : null) || null;
+  const rawPhoto = row.finding_photo || row.findingPhoto || row.evidence_photo || row.evidencePhoto || null;
+  const findingPhoto = rawPhoto;
   const evidencePhoto = row.evidence_photo || row.evidencePhoto || null;
 
   return {
@@ -258,6 +265,7 @@ export function mapMaintenanceFromDb(row, aparLookup = {}, rigLookup = {}) {
 
 export function mapMaintenanceToDb(appMaint) {
   if (!appMaint) return null;
+  const photo = appMaint.evidencePhoto || appMaint.evidence_photo || appMaint.findingPhoto || appMaint.finding_photo || null;
   return {
     id: appMaint.id,
     apar_id: appMaint.aparId || appMaint.apar_id,
@@ -268,8 +276,7 @@ export function mapMaintenanceToDb(appMaint) {
     action_type: appMaint.actionType || appMaint.action_type || 'perbaikan',
     status: appMaint.status || 'open',
     vendor_name: appMaint.vendorName || appMaint.vendor_name || 'PT Sepakat HSE Solution',
-    finding_photo: appMaint.findingPhoto || appMaint.finding_photo || null,
-    evidence_photo: appMaint.evidencePhoto || appMaint.evidence_photo || null,
+    evidence_photo: photo,
     evidence_uploaded_by: appMaint.evidenceUploadedBy || appMaint.evidence_uploaded_by || null,
     repair_notes: appMaint.repairNotes || appMaint.repair_notes || null,
     admin_notes: appMaint.adminNotes || appMaint.admin_notes || null,
@@ -279,11 +286,13 @@ export function mapMaintenanceToDb(appMaint) {
 
 /**
  * Chained Fallback Helper untuk Mendapatkan Foto Temuan Awal (Before)
- * 1. Cek ticket.findingPhoto || ticket.finding_photo
- * 2. Cek inspeksi terkait berdasarkan ticket.inspectionId
- * 3. Cek inspeksi terakhir APAR terkait yang 'tidak_layak' dan punya foto
+ * 1. Cek langsung foto temuan awal di tiket (findingPhoto / finding_photo)
+ * 2. Cek inspeksi terkait berdasarkan inspectionId
+ * 3. Cek foto bukti di tiket itu sendiri (evidencePhoto / evidence_photo)
+ * 4. Cek inspeksi APAR terkait yang punya foto
+ * 5. Cek histori tiket maintenance lain milik APAR yang sama
  */
-export function getTicketBeforePhoto(ticket, inspections = []) {
+export function getTicketBeforePhoto(ticket, inspections = [], allMaintenances = []) {
   if (!ticket) return null;
 
   // 1. Cek langsung di tiket
@@ -294,18 +303,23 @@ export function getTicketBeforePhoto(ticket, inspections = []) {
   const inspId = ticket.inspectionId || ticket.inspection_id;
   if (inspId && Array.isArray(inspections)) {
     const matched = inspections.find(i => i.id === inspId);
-    if (matched && (matched.inspectionPhoto || matched.inspection_photo)) {
-      return matched.inspectionPhoto || matched.inspection_photo;
+    if (matched) {
+      const p = matched.inspectionPhoto || matched.inspection_photo || matched.checklist?.photo || matched.checklist?.inspection_photo;
+      if (p) return p;
     }
   }
 
-  // 3. Cek inspeksi terakhir APAR terkait yang 'tidak_layak' dan punya foto
+  // 3. Cek foto bukti di tiket itu sendiri (terisi saat pelapor melampirkan foto temuan awal)
+  if (ticket.evidencePhoto) return ticket.evidencePhoto;
+  if (ticket.evidence_photo) return ticket.evidence_photo;
+
+  // 4. Cek inspeksi APAR terkait yang punya foto
   const aparId = ticket.aparId || ticket.apar_id;
   const assetCode = ticket.assetCode || ticket.asset_code;
   if (Array.isArray(inspections) && (aparId || assetCode)) {
     const aparInsps = inspections.filter(i =>
       (i.aparId === aparId || i.aparId === assetCode || i.apar_id === aparId) &&
-      (i.inspectionPhoto || i.inspection_photo)
+      (i.inspectionPhoto || i.inspection_photo || i.checklist?.photo || i.checklist?.inspection_photo)
     );
 
     if (aparInsps.length > 0) {
@@ -317,16 +331,30 @@ export function getTicketBeforePhoto(ticket, inspections = []) {
       // Prioritas 1: temuan yang overallStatus === 'tidak_layak'
       const damagedOne = sorted.find(i => i.overallStatus === 'tidak_layak' || i.overall_status === 'tidak_layak');
       if (damagedOne) {
-        return damagedOne.inspectionPhoto || damagedOne.inspection_photo;
+        const p = damagedOne.inspectionPhoto || damagedOne.inspection_photo || damagedOne.checklist?.photo || damagedOne.checklist?.inspection_photo;
+        if (p) return p;
       }
-      return sorted[0].inspectionPhoto || sorted[0].inspection_photo;
+      const p = sorted[0].inspectionPhoto || sorted[0].inspection_photo || sorted[0].checklist?.photo || sorted[0].checklist?.inspection_photo;
+      if (p) return p;
     }
   }
 
-  // 4. Cadangan jika status open dan evidencePhoto terisi saat dibuat
-  if (ticket.status === 'open') {
-    if (ticket.evidencePhoto) return ticket.evidencePhoto;
-    if (ticket.evidence_photo) return ticket.evidence_photo;
+  // 5. Cek tiket maintenance lain milik APAR yang sama yang memiliki foto
+  if (Array.isArray(allMaintenances) && (aparId || assetCode)) {
+    const aparMaints = allMaintenances.filter(m =>
+      (m.aparId === aparId || m.aparId === assetCode || m.apar_id === aparId || m.assetCode === assetCode) &&
+      (m.findingPhoto || m.finding_photo || m.evidencePhoto || m.evidence_photo)
+    );
+
+    if (aparMaints.length > 0) {
+      const sorted = [...aparMaints].sort((a, b) =>
+        new Date(b.createdAt || b.created_at || b.reportedAt || 0) -
+        new Date(a.createdAt || a.created_at || a.reportedAt || 0)
+      );
+      const m = sorted[0];
+      const p = m.findingPhoto || m.finding_photo || m.evidencePhoto || m.evidence_photo;
+      if (p) return p;
+    }
   }
 
   return null;

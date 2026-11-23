@@ -9,7 +9,10 @@ import {
   MapPin,
   Building2,
   Save,
-  Flame
+  Flame,
+  Camera,
+  X,
+  Upload
 } from 'lucide-react';
 import { formatHseDate } from '../../shared/utils/hydrotestUtils';
 
@@ -34,7 +37,48 @@ export default function UserInspect() {
 
   const [issueNotes, setIssueNotes] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
+  const [isCompressing, setIsCompressing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsCompressing(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 900;
+        const MAX_HEIGHT = 900;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width = Math.round((width * MAX_HEIGHT) / height);
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.82);
+        setPhotoUrl(compressedBase64);
+        setIsCompressing(false);
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
 
   if (!targetApar) {
     return (
@@ -228,17 +272,58 @@ export default function UserInspect() {
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              URL / Link Foto Fisik Inspeksi (Opsional):
-            </label>
-            <input
-              type="url"
-              placeholder="https://... (Foto default terpasang otomatis jika dikosongkan)"
-              value={photoUrl}
-              onChange={(e) => setPhotoUrl(e.target.value)}
-              className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
+          {/* Foto Temuan Fisik Inspeksi */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-700">
+                Foto Temuan Fisik APAR (Kamera / File):
+              </label>
+              <span className="text-[10px] text-slate-400">
+                Otomatis disinkron ke Tahap 1 & Verifikasi Admin
+              </span>
+            </div>
+
+            {photoUrl ? (
+              <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-900 h-44 flex items-center justify-center">
+                <img
+                  src={photoUrl}
+                  alt="Pratinjau Foto Inspeksi"
+                  className="w-full h-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => setPhotoUrl('')}
+                  className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-950/80 text-white hover:bg-rose-600 transition shadow cursor-pointer"
+                  title="Hapus / Ambil Ulang"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded bg-slate-950/80 text-white text-[10px] font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Foto Siap Disimpan</span>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/50 hover:bg-blue-50 transition cursor-pointer text-center group">
+                  <Camera className="w-8 h-8 text-blue-600 group-hover:scale-110 transition mb-1" />
+                  <span className="text-xs font-bold text-blue-700">
+                    {isCompressing ? 'Memproses Gambar...' : 'Ambil Foto dari Kamera / Galeri'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">
+                    Format JPG / PNG langsung tersimpan ke Supabase
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    disabled={isCompressing}
+                  />
+                </label>
+              </div>
+            )}
           </div>
         </div>
 
