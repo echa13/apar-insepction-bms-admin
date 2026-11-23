@@ -337,15 +337,30 @@ export function AparProvider({ children }) {
     const originalApar = apars.find(a => a.id === id);
     let updatedApar = null;
 
+    const nextMfg = updates.manufactureDate !== undefined ? updates.manufactureDate : originalApar?.manufactureDate;
+    const nextHydro = calculateNextHydrotestDate(nextMfg);
+
+    let nextRigId = updates.rigId || originalApar?.rigId;
+    let nextRigCode = originalApar?.rigCode;
+    if (updates.rigId) {
+      const foundRig = rigs.find(r => r.id === updates.rigId || r.code === updates.rigId);
+      if (foundRig) {
+        nextRigId = foundRig.id;
+        nextRigCode = foundRig.code;
+      }
+    }
+
     setApars(prev => prev.map(apar => {
       if (apar.id !== id) return apar;
-      const nextMfg = updates.manufactureDate !== undefined ? updates.manufactureDate : apar.manufactureDate;
-      const nextHydro = calculateNextHydrotestDate(nextMfg);
 
       updatedApar = {
         ...apar,
         ...updates,
-        nextHydrotestDate: nextHydro || apar.nextHydrotestDate
+        rigId: nextRigId,
+        rig_id: nextRigId,
+        rigCode: nextRigCode,
+        nextHydrotestDate: nextHydro || apar.nextHydrotestDate,
+        next_hydrotest_date: nextHydro || apar.next_hydrotest_date
       };
       return updatedApar;
     }));
@@ -355,7 +370,13 @@ export function AparProvider({ children }) {
         const dbPayload = mapAparToDb(updatedApar);
         const { error } = await supabase.from('apars').update(dbPayload).eq('id', id);
         if (error) throw error;
-        notifySuccess(`Perubahan ${updatedApar.assetCode} disimpan ke Supabase.`);
+
+        // Beri tahu jika terjadi perpindahan rig
+        if (originalApar && updates.rigId && updates.rigId !== originalApar.rigId) {
+          notifySuccess(`Tabung ${updatedApar.assetCode} berhasil dipindahkan ke Rig ${nextRigCode}.`);
+        } else {
+          notifySuccess(`Perubahan ${updatedApar.assetCode} disimpan ke Supabase.`);
+        }
         await fetchAllData({ silent: true });
       } catch (e) {
         console.error('Supabase updateApar error:', e);

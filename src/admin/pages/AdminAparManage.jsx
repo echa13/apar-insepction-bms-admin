@@ -3,7 +3,6 @@ import { useApar } from '../../shared/context/AparContext';
 import { getHydrotestStatus, formatHseDate } from '../../shared/utils/hydrotestUtils';
 import AparFormModal from '../components/AparFormModal';
 import ExcelImportModal from '../components/ExcelImportModal';
-import QrPrintModal from '../components/QrPrintModal';
 import InspectionHistoryModal from '../components/InspectionHistoryModal';
 import {
   Flame,
@@ -11,7 +10,6 @@ import {
   Filter,
   Plus,
   UploadCloud,
-  Printer,
   Edit2,
   Trash2,
   AlertTriangle,
@@ -31,7 +29,6 @@ export default function AdminAparManage() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingApar, setEditingApar] = useState(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [historyModalApar, setHistoryModalApar] = useState(null);
 
   // Filters State
@@ -71,8 +68,13 @@ export default function AdminAparManage() {
       }
 
       // 5. Condition Status
-      if (selectedStatus !== 'all' && apar.status !== selectedStatus) {
-        return false;
+      if (selectedStatus !== 'all') {
+        const isDamaged = apar.status === 'rusak' || apar.status === 'perlu_perbaikan';
+        if (selectedStatus === 'perlu_perbaikan' || selectedStatus === 'rusak') {
+          if (!isDamaged) return false;
+        } else if (apar.status !== selectedStatus) {
+          return false;
+        }
       }
 
       // 6. Hydrotest Status
@@ -88,8 +90,8 @@ export default function AdminAparManage() {
   const handleDelete = async (apar) => {
     const result = await confirmActionAlert({
       title: 'Hapus Tabung APAR?',
-      text: `Tabung ${apar.assetCode} (${apar.rigCode}) akan dihapus permanen dari Supabase.`,
-      confirmButtonText: 'Ya, Hapus',
+      text: `Tabung ${apar.assetCode} (${apar.rigCode} — ${apar.placement}) akan dihapus permanen dari Supabase. Data tidak dapat dipulihkan.`,
+      confirmButtonText: 'Ya, Hapus Permanen',
       confirmButtonColor: '#dc2626'
     });
     if (result.isConfirmed) {
@@ -121,23 +123,15 @@ export default function AdminAparManage() {
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => setIsImportModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition shadow-xs cursor-pointer"
           >
             <UploadCloud className="w-4 h-4 text-slate-500" />
             <span>Impor Excel (.xlsx)</span>
           </button>
 
           <button
-            onClick={() => setIsQrModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition shadow-xs"
-          >
-            <Printer className="w-4 h-4 text-slate-500" />
-            <span>Cetak Label QR</span>
-          </button>
-
-          <button
             onClick={() => { setEditingApar(null); setIsFormModalOpen(true); }}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-red-600 text-white hover:bg-red-700 transition shadow-md shadow-red-600/20"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-red-600 text-white hover:bg-red-700 transition shadow-md shadow-red-600/20 active:scale-98 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Tambah APAR Baru</span>
@@ -421,12 +415,6 @@ export default function AdminAparManage() {
       {isImportModalOpen && (
         <ExcelImportModal
           onClose={() => setIsImportModalOpen(false)}
-        />
-      )}
-
-      {isQrModalOpen && (
-        <QrPrintModal
-          onClose={() => setIsQrModalOpen(false)}
         />
       )}
 
