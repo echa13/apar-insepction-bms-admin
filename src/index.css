@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-hse-canvas text-slate-800 antialiased font-sans min-h-screen selection:bg-hse-primaryLight selection:text-hse-primary;
+  }
+}
+
+/* Print Optimization for QR Code Stickers */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8mm !important;
+    page-break-inside: avoid;
+  }
+  .print-sticker {
+    border: 1.5px solid #000 !important;
+    border-radius: 6px !important;
+    padding: 6mm !important;
+    page-break-inside: avoid;
+  }
+}
+
+/* Custom Scrollbar for Dense Tables */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
