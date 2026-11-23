@@ -160,14 +160,26 @@ export function mapAparToDb(appApar) {
 // ==========================================
 // 5. INSPECTIONS MAPPER
 // ==========================================
-export function mapInspectionFromDb(row) {
+export function mapInspectionFromDb(row, aparLookup = {}) {
   if (!row) return null;
-  const photo = row.inspection_photo || row.inspectionPhoto || row.checklist?.photo || row.checklist?.inspection_photo || null;
+  let checklist = row.checklist || {};
+  if (typeof checklist === 'string') {
+    try {
+      checklist = JSON.parse(checklist);
+    } catch {
+      checklist = {};
+    }
+  }
+
+  const photo = row.inspection_photo || row.inspectionPhoto || checklist?.photo || checklist?.inspection_photo || checklist?.foto || checklist?.image || row.photo || row.evidence_photo || null;
+  const apar = aparLookup[row.apar_id] || aparLookup[row.apar_id?.toLowerCase()] || {};
 
   return {
     id: row.id,
     aparId: row.apar_id,
     apar_id: row.apar_id,
+    assetCode: apar.assetCode || apar.asset_code || row.apar_id,
+    asset_code: apar.assetCode || apar.asset_code || row.apar_id,
     rigId: row.rig_id,
     rig_id: row.rig_id,
     inspectorName: row.inspector_name || 'HFO Lapangan',
@@ -177,7 +189,7 @@ export function mapInspectionFromDb(row) {
     category: row.category,
     thirdPartyVendor: row.third_party_vendor,
     third_party_vendor: row.third_party_vendor,
-    checklist: row.checklist || {},
+    checklist,
     overallStatus: row.overall_status,
     overall_status: row.overall_status,
     notes: row.notes,
@@ -288,72 +300,107 @@ export function mapMaintenanceToDb(appMaint) {
  * Chained Fallback Helper untuk Mendapatkan Foto Temuan Awal (Before)
  * 1. Cek langsung foto temuan awal di tiket (findingPhoto / finding_photo)
  * 2. Cek inspeksi terkait berdasarkan inspectionId
- * 3. Cek foto bukti di tiket itu sendiri (evidencePhoto / evidence_photo)
- * 4. Cek inspeksi APAR terkait yang punya foto
+ * 3. Cek riwayat inspeksi APAR ini (prioritas status 'tidak_layak', tanggal terbaru)
+ * 4. Cek foto bukti di tiket itu sendiri (evidencePhoto / evidence_photo)
  * 5. Cek histori tiket maintenance lain milik APAR yang sama
  */
 export function getTicketBeforePhoto(ticket, inspections = [], allMaintenances = []) {
   if (!ticket) return null;
+
+  const clean = (s) => (s ? String(s).toLowerCase().replace(/[^a-z0-9]/g, '') : '');
+
+  const extractPhoto = (item) => {
+    if (!item) return null;
+    if (typeof item === 'string') {
+      if (item.startsWith('data:image') || item.startsWith('http://') || item.startsWith('https://')) return item;
+      return null;
+    }
+    let chk = item.checklist;
+    if (typeof chk === 'string') {
+      try { chk = JSON.parse(chk); } catch { chk = {}; }
+    }
+    return item.findingPhoto || item.finding_photo ||
+           item.inspectionPhoto || item.inspection_photo ||
+           chk?.photo || chk?.inspection_photo || chk?.foto || chk?.image || chk?.evidence_photo || chk?.finding_photo ||
+           item.evidencePhoto || item.evidence_photo ||
+           item.photo || item.photoUrl || item.imageUrl || null;
+  };
 
   // 1. Cek langsung di tiket
   if (ticket.findingPhoto) return ticket.findingPhoto;
   if (ticket.finding_photo) return ticket.finding_photo;
 
   // 2. Cek inspeksi terkait berdasarkan inspectionId
-  const inspId = ticket.inspectionId || ticket.inspection_id;
+  const inspId = clean(ticket.inspectionId || ticket.inspection_id);
   if (inspId && Array.isArray(inspections)) {
-    const matched = inspections.find(i => i.id === inspId);
+    const matched = inspections.find(i => clean(i.id) === inspId);
     if (matched) {
-      const p = matched.inspectionPhoto || matched.inspection_photo || matched.checklist?.photo || matched.checklist?.inspection_photo;
+      const p = extractPhoto(matched);
       if (p) return p;
     }
   }
 
-  // 3. Cek foto bukti di tiket itu sendiri (terisi saat pelapor melampirkan foto temuan awal)
+  // 3. Cek inspeksi APAR terkait yang punya foto (cari berdasarkan aparId atau assetCode secara normalized)
+  const targetAparId = clean(ticket.aparId || ticket.apar_id);
+  const targetAsset = clean(ticket.assetCode || ticket.asset_code);
+
+  if (Array.isArray(inspections) && (targetAparId || targetAsset)) {
+    const matchedInsps = inspections.filter(i => {
+      const iAparId = clean(i.aparId || i.apar_id);
+      const iAsset = clean(i.assetCode || i.asset_code);
+      return (
+        (targetAparId && (iAparId === targetAparId || iAsset === targetAparId)) ||
+        (targetAsset && (iAparId === targetAsset || iAsset === targetAsset)) ||
+        (targetAparId && iAparId && (iAparId.includes(targetAparId) || targetAparId.includes(iAparId)))
+      );
+    });
+
+    if (matchedInsps.length > 0) {
+      // Prioritas 1: temuan yang statusnya 'tidak_layak'
+      // Prioritas 2: tanggal terbaru
+      const sorted = [...matchedInsps].sort((a, b) => {
+        const aIsBad = (a.overallStatus === 'tidak_layak' || a.overall_status === 'tidak_layak') ? 1 : 0;
+        const bIsBad = (b.overallStatus === 'tidak_layak' || b.overall_status === 'tidak_layak') ? 1 : 0;
+        if (aIsBad !== bIsBad) return bIsBad - aIsBad;
+        const dateA = new Date(a.inspectionDate || a.inspection_date || a.createdAt || a.created_at || 0).getTime();
+        const dateB = new Date(b.inspectionDate || b.inspection_date || b.createdAt || b.created_at || 0).getTime();
+        return dateB - dateA;
+      });
+
+      for (const insp of sorted) {
+        const p = extractPhoto(insp);
+        if (p) return p;
+      }
+    }
+  }
+
+  // 4. Cek foto bukti di tiket itu sendiri (terisi saat pelapor melampirkan foto temuan awal)
   if (ticket.evidencePhoto) return ticket.evidencePhoto;
   if (ticket.evidence_photo) return ticket.evidence_photo;
 
-  // 4. Cek inspeksi APAR terkait yang punya foto
-  const aparId = ticket.aparId || ticket.apar_id;
-  const assetCode = ticket.assetCode || ticket.asset_code;
-  if (Array.isArray(inspections) && (aparId || assetCode)) {
-    const aparInsps = inspections.filter(i =>
-      (i.aparId === aparId || i.aparId === assetCode || i.apar_id === aparId) &&
-      (i.inspectionPhoto || i.inspection_photo || i.checklist?.photo || i.checklist?.inspection_photo)
-    );
-
-    if (aparInsps.length > 0) {
-      const sorted = [...aparInsps].sort((a, b) =>
-        new Date(b.inspectionDate || b.inspection_date || b.createdAt || b.created_at || 0) -
-        new Date(a.inspectionDate || a.inspection_date || a.createdAt || a.created_at || 0)
+  // 5. Cek tiket maintenance lain milik APAR yang sama yang memiliki foto
+  if (Array.isArray(allMaintenances) && (targetAparId || targetAsset)) {
+    const matchedMaints = allMaintenances.filter(m => {
+      if (m.id === ticket.id) return false;
+      const mAparId = clean(m.aparId || m.apar_id);
+      const mAsset = clean(m.assetCode || m.asset_code);
+      return (
+        (targetAparId && (mAparId === targetAparId || mAsset === targetAparId)) ||
+        (targetAsset && (mAparId === targetAsset || mAsset === targetAsset))
       );
+    });
 
-      // Prioritas 1: temuan yang overallStatus === 'tidak_layak'
-      const damagedOne = sorted.find(i => i.overallStatus === 'tidak_layak' || i.overall_status === 'tidak_layak');
-      if (damagedOne) {
-        const p = damagedOne.inspectionPhoto || damagedOne.inspection_photo || damagedOne.checklist?.photo || damagedOne.checklist?.inspection_photo;
+    if (matchedMaints.length > 0) {
+      const sorted = [...matchedMaints].sort((a, b) => {
+        const dateA = new Date(a.createdAt || a.created_at || a.reportedAt || 0).getTime();
+        const dateB = new Date(b.createdAt || b.created_at || b.reportedAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      for (const m of sorted) {
+        const p = extractPhoto(m);
         if (p) return p;
       }
-      const p = sorted[0].inspectionPhoto || sorted[0].inspection_photo || sorted[0].checklist?.photo || sorted[0].checklist?.inspection_photo;
-      if (p) return p;
-    }
-  }
-
-  // 5. Cek tiket maintenance lain milik APAR yang sama yang memiliki foto
-  if (Array.isArray(allMaintenances) && (aparId || assetCode)) {
-    const aparMaints = allMaintenances.filter(m =>
-      (m.aparId === aparId || m.aparId === assetCode || m.apar_id === aparId || m.assetCode === assetCode) &&
-      (m.findingPhoto || m.finding_photo || m.evidencePhoto || m.evidence_photo)
-    );
-
-    if (aparMaints.length > 0) {
-      const sorted = [...aparMaints].sort((a, b) =>
-        new Date(b.createdAt || b.created_at || b.reportedAt || 0) -
-        new Date(a.createdAt || a.created_at || a.reportedAt || 0)
-      );
-      const m = sorted[0];
-      const p = m.findingPhoto || m.finding_photo || m.evidencePhoto || m.evidence_photo;
-      if (p) return p;
     }
   }
 

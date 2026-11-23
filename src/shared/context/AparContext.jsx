@@ -133,15 +133,24 @@ export function AparProvider({ children }) {
         ? dbApars.map(a => mapAparFromDb(a, rigLookup))
         : aparsSeed;
 
+      const aparLookup = {};
+      mappedApars.forEach(a => {
+        if (a.id) {
+          aparLookup[a.id] = a;
+          aparLookup[a.id.toLowerCase()] = a;
+        }
+        if (a.assetCode) {
+          aparLookup[a.assetCode] = a;
+          aparLookup[a.assetCode.toLowerCase()] = a;
+        }
+      });
+
       // 5. Inspections mapping
       const mappedInspections = (dbInspections && dbInspections.length > 0)
-        ? dbInspections.map(mapInspectionFromDb)
+        ? dbInspections.map(i => mapInspectionFromDb(i, aparLookup))
         : [];
 
       // 6. Maintenances mapping
-      const aparLookup = {};
-      mappedApars.forEach(a => { aparLookup[a.id] = a; aparLookup[a.assetCode] = a; });
-
       const mappedMaint = (dbMaintenances && dbMaintenances.length > 0)
         ? dbMaintenances.map(m => mapMaintenanceFromDb(m, aparLookup, rigLookup))
         : initialMaintenancesSeed;

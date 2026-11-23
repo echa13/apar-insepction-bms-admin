@@ -21,10 +21,22 @@ export default function InspectionHistoryModal({ apar, onClose }) {
 
   if (!apar) return null;
 
-  // Filter inspeksi yang terkait dengan tabung APAR ini
+  // Filter inspeksi yang terkait dengan tabung APAR ini (dengan normalisasi kode dan id)
+  const clean = (s) => (s ? String(s).toLowerCase().replace(/[^a-z0-9]/g, '') : '');
+  const aparCleanId = clean(apar.id);
+  const aparCleanAsset = clean(apar.assetCode);
+
   const relatedInspections = inspections
-    .filter(i => i.aparId === apar.id || i.aparId === apar.assetCode)
-    .sort((a, b) => new Date(b.inspectionDate || b.createdAt) - new Date(a.inspectionDate || a.createdAt));
+    .filter(i => {
+      const iId = clean(i.aparId || i.apar_id);
+      const iAsset = clean(i.assetCode || i.asset_code);
+      return (
+        (aparCleanId && (iId === aparCleanId || iAsset === aparCleanId)) ||
+        (aparCleanAsset && (iId === aparCleanAsset || iAsset === aparCleanAsset)) ||
+        (aparCleanId && iId && (iId.includes(aparCleanId) || aparCleanId.includes(iId)))
+      );
+    })
+    .sort((a, b) => new Date(b.inspectionDate || b.createdAt || 0) - new Date(a.inspectionDate || a.createdAt || 0));
 
   return (
     <>

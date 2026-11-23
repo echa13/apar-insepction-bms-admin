@@ -368,10 +368,10 @@ export default function AdminMaintenances() {
       {/* MODAL TAHAP 1: TERIMA LAPORAN BARU & TETAPKAN TINDAKAN */}
       {/* ========================================================================= */}
       {dispatchTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg max-h-[92dvh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+            <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center">
                   <Send className="w-4 h-4" />
@@ -382,15 +382,16 @@ export default function AdminMaintenances() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setDispatchTicket(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Content Form */}
-            <form onSubmit={handleConfirmDispatch} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleConfirmDispatch} className="p-5 space-y-4 text-xs flex-1 overflow-y-auto">
               {/* Detail Laporan Masuk */}
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
                 <div className="grid grid-cols-2 gap-2">
@@ -422,7 +423,7 @@ export default function AdminMaintenances() {
 
                 <div className="pt-2 border-t border-slate-200">
                   <span className="text-slate-400 block text-[11px] mb-0.5">Deskripsi Kerusakan:</span>
-                  <p className="font-semibold text-slate-900 bg-white p-2 rounded border border-slate-200">
+                  <p className="font-semibold text-slate-900 bg-white p-2.5 rounded-lg border border-slate-200">
                     {dispatchTicket.issueDescription}
                   </p>
                 </div>
@@ -433,11 +434,14 @@ export default function AdminMaintenances() {
                   {(() => {
                     const beforePhoto = getTicketBeforePhoto(dispatchTicket, inspections, maintenances);
                     return beforePhoto ? (
-                      <div className="relative rounded-lg overflow-hidden border border-slate-200 h-36 bg-slate-900 flex items-center justify-center">
+                      <div
+                        onClick={() => setPreviewPhoto({ src: beforePhoto, title: `Foto Temuan Awal (Before) — ${dispatchTicket.assetCode}` })}
+                        className="relative rounded-xl overflow-hidden border border-slate-200 h-48 bg-slate-900 flex items-center justify-center cursor-pointer group shadow-inner"
+                      >
                         <img
                           src={beforePhoto}
                           alt="Temuan Awal"
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                             if (e.currentTarget.parentElement) {
@@ -447,25 +451,25 @@ export default function AdminMaintenances() {
                           }}
                         />
                         <div className="img-error-fallback hidden absolute inset-0 items-center justify-center bg-slate-800 text-slate-400 text-xs gap-1.5">
-                          <Camera className="w-4 h-4 text-slate-500" />
+                          <Camera className="w-5 h-5 text-slate-500" />
                           <span>Gagal memuat gambar</span>
                         </div>
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setPreviewPhoto({ src: beforePhoto, title: `Foto Temuan Awal — ${dispatchTicket.assetCode}` });
+                            setPreviewPhoto({ src: beforePhoto, title: `Foto Temuan Awal (Before) — ${dispatchTicket.assetCode}` });
                           }}
-                          className="absolute bottom-2 right-2 px-2.5 py-1 rounded-md bg-slate-950/80 hover:bg-slate-900 text-white text-[11px] font-semibold flex items-center gap-1 shadow-md transition-colors cursor-pointer"
+                          className="absolute bottom-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-slate-950/85 hover:bg-slate-900 text-white text-xs font-semibold flex items-center gap-1.5 shadow-lg transition-all cursor-pointer border border-white/10"
                         >
-                          <ZoomIn className="w-3.5 h-3.5" />
-                          <span>Perbesar</span>
+                          <ZoomIn className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Perbesar / Inspect Foto</span>
                         </button>
                       </div>
                     ) : (
-                      <div className="p-3 rounded-lg bg-white border border-dashed border-slate-300 text-slate-400 text-center flex items-center justify-center gap-1.5">
-                        <Camera className="w-4 h-4 text-slate-300" />
-                        <span>Foto temuan awal tidak dilampirkan oleh pelapor</span>
+                      <div className="p-3.5 rounded-xl bg-white border border-dashed border-slate-300 text-slate-400 text-center flex items-center justify-center gap-2">
+                        <Camera className="w-4 h-4 text-slate-400" />
+                        <span className="text-xs">Foto temuan awal tidak dilampirkan oleh pelapor</span>
                       </div>
                     );
                   })()}
