@@ -25,6 +25,19 @@ export default function AdminRigs() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newRig, setNewRig] = useState({ code: '', name: '', location: '' });
   const [showPasswords, setShowPasswords] = useState({});
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'active' | 'inactive'
+  const [togglingId, setTogglingId] = useState(null);
+
+  const activeCount = rigs.filter(r => r.status === 'active' || r.status === 'aktif').length;
+  const inactiveCount = rigs.filter(r => r.status === 'inactive' || r.status === 'nonaktif').length;
+  const totalCount = rigs.length;
+
+  const filteredRigs = rigs.filter(rig => {
+    const isActive = rig.status === 'active' || rig.status === 'aktif';
+    if (statusFilter === 'active') return isActive;
+    if (statusFilter === 'inactive') return !isActive;
+    return true;
+  });
 
   const handleCreateRig = async (e) => {
     e.preventDefault();
@@ -32,6 +45,32 @@ export default function AdminRigs() {
     await addRig(newRig.code, newRig.name, newRig.location);
     setNewRig({ code: '', name: '', location: '' });
     setIsAddModalOpen(false);
+  };
+
+  const handleToggleStatus = async (rig) => {
+    const isCurrentlyActive = rig.status === 'active' || rig.status === 'aktif';
+    const actionText = isCurrentlyActive ? 'Nonaktifkan' : 'Aktifkan';
+
+    const result = await confirmActionAlert({
+      title: `${actionText} Rig ${rig.code}?`,
+      text: isCurrentlyActive
+        ? `Rig ${rig.code} akan ditandai NONAKTIF di Supabase. Petugas HFO tidak akan dapat memilih Rig ini untuk inspeksi baru.`
+        : `Rig ${rig.code} akan diaktifkan kembali (status AKTIF) di Supabase dan dapat diinspeksi oleh petugas HFO.`,
+      confirmButtonText: `Ya, ${actionText}`,
+      confirmButtonColor: isCurrentlyActive ? '#e11d48' : '#059669',
+      cancelButtonText: 'Batal'
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      setTogglingId(rig.id);
+      await toggleRigStatus(rig.id);
+    } catch (err) {
+      console.error('Error toggling rig status:', err);
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const handleResetPassword = async (user) => {
@@ -72,9 +111,65 @@ export default function AdminRigs() {
         </button>
       </div>
 
+      {/* Filter Tabs: Semua, Aktif, Nonaktif */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+            statusFilter === 'all'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <span>Semua</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+            statusFilter === 'all' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {totalCount}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setStatusFilter('active')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+            statusFilter === 'active'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400" />
+          <span>Aktif</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+            statusFilter === 'active' ? 'bg-emerald-700 text-emerald-100' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {activeCount}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setStatusFilter('inactive')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
+            statusFilter === 'inactive'
+              ? 'bg-slate-700 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-slate-400" />
+          <span>Nonaktif</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+            statusFilter === 'inactive' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {inactiveCount}
+          </span>
+        </button>
+      </div>
+
       {/* Grid of Rigs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {rigs.map((rig) => {
+        {filteredRigs.map((rig) => {
+          const isRigActive = rig.status === 'active' || rig.status === 'aktif';
+          const isTogglingThis = togglingId === rig.id;
           const aparsInRig = apars.filter(a => a.rigId === rig.id || a.rigCode === rig.code);
           const totalInRig = aparsInRig.length;
           const layakInRig = aparsInRig.filter(a => a.status === 'layak').length;
@@ -85,36 +180,49 @@ export default function AdminRigs() {
             <div
               key={rig.id}
               className={`p-5 rounded-2xl border bg-white shadow-xs transition hover:shadow-md flex flex-col justify-between ${
-                rig.status === 'inactive' ? 'opacity-60 bg-slate-50' : 'border-slate-200/80'
+                !isRigActive ? 'opacity-70 bg-slate-50 border-slate-300' : 'border-slate-200/80'
               }`}
             >
               <div>
                 {/* Rig Card Header */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-800 font-mono">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 shrink-0 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-800 font-mono">
                       {rig.code.replace('BMS-', '')}
                     </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900">{rig.code}</h3>
-                      <p className="text-[11px] text-slate-500 flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-slate-400" />
-                        {rig.location || 'Wilayah Operasional'}
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-bold text-slate-900 truncate">{rig.code}</h3>
+                      <p className="text-[11px] text-slate-500 flex items-center gap-1 truncate">
+                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="truncate">{rig.location || 'Wilayah Operasional'}</span>
                       </p>
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => toggleRigStatus(rig.id)}
-                    title={rig.status === 'active' ? 'Nonaktifkan Rig' : 'Aktifkan Rig'}
-                    className={`p-1.5 rounded-lg text-xs font-bold transition ${
-                      rig.status === 'active'
-                        ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
-                        : 'text-slate-400 bg-slate-100 hover:bg-slate-200'
-                    }`}
-                  >
-                    <Power className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Tombol Aksi Status Berlabel Jelas: Nonaktifkan / Aktifkan */}
+                  {isRigActive ? (
+                    <button
+                      type="button"
+                      disabled={isTogglingThis}
+                      onClick={() => handleToggleStatus(rig)}
+                      title={`Klik untuk nonaktifkan Rig ${rig.code}`}
+                      className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 transition active:scale-95 disabled:opacity-50"
+                    >
+                      <Power className="w-3.5 h-3.5 text-rose-600" />
+                      <span>{isTogglingThis ? '...' : 'Nonaktifkan'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isTogglingThis}
+                      onClick={() => handleToggleStatus(rig)}
+                      title={`Klik untuk aktifkan Rig ${rig.code}`}
+                      className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 transition active:scale-95 disabled:opacity-50"
+                    >
+                      <Power className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{isTogglingThis ? '...' : 'Aktifkan'}</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Metrics */}
@@ -150,10 +258,13 @@ export default function AdminRigs() {
 
               {/* Card Footer Action */}
               <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                  rig.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                  isRigActive
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                    : 'bg-slate-200 text-slate-600 border border-slate-300'
                 }`}>
-                  {rig.status}
+                  <span className={`w-1.5 h-1.5 rounded-full ${isRigActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                  {isRigActive ? 'AKTIF' : 'NONAKTIF'}
                 </span>
 
                 <button
@@ -167,6 +278,14 @@ export default function AdminRigs() {
             </div>
           );
         })}
+
+        {filteredRigs.length === 0 && (
+          <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-dashed border-slate-200">
+            <Building2 className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+            <p className="text-sm font-semibold text-slate-700">Tidak ada Rig dengan status '{statusFilter}'</p>
+            <p className="text-xs text-slate-400 mt-1">Pilih tab filter lain untuk melihat daftar Rig operasional.</p>
+          </div>
+        )}
       </div>
 
       {/* Tabel Manajemen Akun Petugas HFO Lapangan (hfo_users) */}

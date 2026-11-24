@@ -481,25 +481,42 @@ export function AparProvider({ children }) {
   };
 
   const toggleRigStatus = async (rigId) => {
-    let nextStatus = 'aktif';
-    const oldRig = rigs.find(r => r.id === rigId);
+    const oldRig = rigs.find(r => r.id === rigId || r.code === rigId);
+    if (!oldRig) {
+      console.warn(`[toggleRigStatus] Rig ${rigId} tidak ditemukan.`);
+      return;
+    }
 
-    setRigs(prev => prev.map(r => {
-      if (r.id !== rigId) return r;
-      const toggled = r.status === 'active' ? 'inactive' : 'active';
-      nextStatus = toggled === 'active' ? 'aktif' : 'nonaktif';
-      return { ...r, status: toggled };
-    }));
+    const isCurrentlyActive = (oldRig.status === 'active' || oldRig.status === 'aktif');
+    const nextUiStatus = isCurrentlyActive ? 'inactive' : 'active';
+    const nextDbStatus = isCurrentlyActive ? 'nonaktif' : 'aktif';
+
+    // 1. Optimistic UI update
+    setRigs(prev => prev.map(r => (r.id === oldRig.id ? { ...r, status: nextUiStatus } : r)));
 
     try {
-      const { error } = await supabase.from('rigs').update({ status: nextStatus }).eq('id', rigId);
+      // 2. Query update dengan .select() untuk verifikasi data benar-benar berubah di DB
+      const { data, error } = await supabase
+        .from('rigs')
+        .update({ status: nextDbStatus })
+        .eq('id', oldRig.id)
+        .select();
+
       if (error) throw error;
-      notifySuccess(`Status Rig ${rigId} berhasil diperbarui ke '${nextStatus}'.`);
+      if (!data || data.length === 0) {
+        throw new Error(
+          `Gagal mengubah status Rig ${oldRig.code || oldRig.id} di database Supabase (0 baris terpengaruh). Pastikan RLS mengizinkan operasi UPDATE.`
+        );
+      }
+
+      notifySuccess(`Status Rig ${oldRig.code || oldRig.name} berhasil diubah menjadi '${nextDbStatus.toUpperCase()}'.`);
       await fetchAllData({ silent: true });
+      return data[0];
     } catch (e) {
       console.error('Supabase toggleRigStatus error:', e);
-      if (oldRig) setRigs(prev => prev.map(r => r.id === rigId ? oldRig : r));
-      showErrorAlert('Gagal Mengubah Status Rig', e.message || 'Terjadi kesalahan di Supabase.');
+      // Rollback UI state jika gagal
+      setRigs(prev => prev.map(r => (r.id === oldRig.id ? oldRig : r)));
+      showErrorAlert('Gagal Mengubah Status Rig', e.message || 'Terjadi kesalahan saat mengupdate status di Supabase.');
       throw e;
     }
   };
