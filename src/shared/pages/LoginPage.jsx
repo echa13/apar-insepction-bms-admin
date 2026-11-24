@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApar } from '../context/AparContext';
 import { ShieldCheck, Flame, HardHat, ShieldAlert, ArrowRight, CheckCircle2 } from 'lucide-react';
+import besmindoLogo from '../../assets/logo-besmindo.png';
 
 export default function LoginPage() {
   const [activeTab, setActiveTab] = useState('admin'); // 'admin' | 'user'
@@ -33,8 +34,8 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md bg-slate-800/90 backdrop-blur border border-slate-700/80 rounded-2xl shadow-2xl p-6 sm:p-8">
         {/* Brand Header */}
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-red-600 to-rose-500 flex items-center justify-center shadow-lg shadow-red-600/30">
-            <Flame className="w-7 h-7 text-white" />
+          <div className="w-12 h-12 rounded-xl bg-white p-1.5 flex items-center justify-center shadow-lg shadow-blue-950/50 shrink-0 border border-slate-700/60 overflow-hidden">
+            <img src={besmindoLogo} alt="Logo Besmindo" className="w-full h-full object-contain" />
           </div>
           <div>
             <div className="flex items-center gap-2">

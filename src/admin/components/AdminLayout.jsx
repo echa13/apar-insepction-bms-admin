@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useApar } from '../../shared/context/AparContext';
+import besmindoLogo from '../../assets/logo-besmindo.png';
 import {
   LayoutDashboard,
   Flame,
@@ -48,8 +49,8 @@ export default function AdminLayout() {
       {/* Mobile Topbar */}
       <div className="lg:hidden bg-[#0F172A] text-white px-4 py-3 flex items-center justify-between border-b border-slate-800 z-30 sticky top-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center shadow-md shadow-red-600/30">
-            <Flame className="w-5 h-5 text-white" />
+          <div className="w-9 h-9 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shadow-blue-950/40 shrink-0 border border-slate-700/60 overflow-hidden">
+            <img src={besmindoLogo} alt="Logo Besmindo" className="w-full h-full object-contain" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -81,12 +82,12 @@ export default function AdminLayout() {
       >
         {/* Sidebar Header */}
         <div className="p-5 border-b border-slate-800/80 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-red-600 to-rose-500 flex items-center justify-center shadow-lg shadow-red-600/30 shrink-0">
-            <Flame className="w-6 h-6 text-white" />
+          <div className="w-11 h-11 rounded-xl bg-white p-1.5 flex items-center justify-center shadow-lg shadow-blue-950/50 shrink-0 border border-slate-700/60 overflow-hidden">
+            <img src={besmindoLogo} alt="Logo Besmindo" className="w-full h-full object-contain" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-1">
-              <span className="text-[10px] font-bold tracking-wider uppercase text-red-400">
+              <span className="text-[10px] font-bold tracking-wider uppercase text-blue-400">
                 Pusat Kendali K3
               </span>
               <span className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold uppercase ${
